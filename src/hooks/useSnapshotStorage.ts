@@ -114,41 +114,77 @@ export const useSnapshotStorage = () => {
     []
   );
 
+  const handleImportFailure = useCallback((error: unknown) => {
+    console.error('Failed to import snapshot', error);
+    const message = (error as Error)?.message ?? 'Failed to import snapshot.';
+    setSnapshotError(message);
+    setSnapshotStage('error');
+    setSnapshotSource('none');
+  }, []);
+
   const importSnapshotFromFile = useCallback(
     async (file: File): Promise<StoredSnapshotRecord> => {
       const lowerName = file.name.toLowerCase();
       if (lowerName.endsWith('.zst')) {
-        throw new Error('Compressed snapshots (.zst) are not supported yet. Decompress before importing.');
+        const error = new Error(
+          'Compressed snapshots (.zst) are not supported yet. Decompress before importing.'
+        );
+        handleImportFailure(error);
+        throw error;
       }
       setSnapshotStage('importing');
       setSnapshotError(null);
-      const buffer = await file.arrayBuffer();
-      return storeSnapshotFromBuffer(
-        buffer,
-        { name: file.name, size: file.size, savedAt: Date.now() },
-        { source: 'uploaded' }
-      );
+      let didSucceed = false;
+      try {
+        const buffer = await file.arrayBuffer();
+        const record = await storeSnapshotFromBuffer(
+          buffer,
+          { name: file.name, size: file.size, savedAt: Date.now() },
+          { source: 'uploaded' }
+        );
+        didSucceed = true;
+        return record;
+      } catch (error) {
+        handleImportFailure(error);
+        throw error;
+      } finally {
+        if (!didSucceed) {
+          setSnapshotStage((prev) => (prev === 'importing' ? 'error' : prev));
+        }
+      }
     },
-    [storeSnapshotFromBuffer]
+    [handleImportFailure, storeSnapshotFromBuffer]
   );
 
   const importSnapshotFromUrl = useCallback(
     async (url: string): Promise<StoredSnapshotRecord> => {
       setSnapshotStage('importing');
       setSnapshotError(null);
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to download snapshot (${response.status} ${response.statusText})`);
+      let didSucceed = false;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to download snapshot (${response.status} ${response.statusText})`);
+        }
+        const buffer = await response.arrayBuffer();
+        const resourceName = normalizeResourceName(url);
+        const record = await storeSnapshotFromBuffer(
+          buffer,
+          { name: resourceName, size: buffer.byteLength, savedAt: Date.now() },
+          { source: 'remote' }
+        );
+        didSucceed = true;
+        return record;
+      } catch (error) {
+        handleImportFailure(error);
+        throw error;
+      } finally {
+        if (!didSucceed) {
+          setSnapshotStage((prev) => (prev === 'importing' ? 'error' : prev));
+        }
       }
-      const buffer = await response.arrayBuffer();
-      const resourceName = normalizeResourceName(url);
-      return storeSnapshotFromBuffer(
-        buffer,
-        { name: resourceName, size: buffer.byteLength, savedAt: Date.now() },
-        { source: 'remote' }
-      );
     },
-    [storeSnapshotFromBuffer]
+    [handleImportFailure, storeSnapshotFromBuffer]
   );
 
   const forgetSnapshot = useCallback(async () => {
