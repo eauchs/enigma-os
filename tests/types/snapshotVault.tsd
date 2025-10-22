@@ -1,0 +1,45 @@
+import { expectError, expectType } from 'tsd';
+import {
+  SnapshotOperationStatus,
+  SnapshotProgressUpdate,
+  SnapshotMetadata,
+  importSnapshot,
+  captureSnapshot,
+  renameSnapshot,
+  exportSnapshot,
+  selectSnapshotsByProfile,
+  SnapshotCaptureSource,
+  SnapshotImportOptions,
+  SnapshotCaptureOptions
+} from '../../src/services/snapshotVault';
+
+expectType<SnapshotOperationStatus>('IN_PROGRESS');
+expectError(() => {
+  const status: SnapshotOperationStatus = 'UNKNOWN' as never;
+  return status;
+});
+
+const progressUpdate: SnapshotProgressUpdate = {
+  status: 'IN_PROGRESS',
+  progress: 50
+};
+expectType<number>(progressUpdate.progress);
+
+expectType<Promise<SnapshotMetadata[]>>(selectSnapshotsByProfile('dsl-2024'));
+expectType<Promise<SnapshotMetadata[]>>(selectSnapshotsByProfile(null));
+
+const captureSource: SnapshotCaptureSource = async () => new ArrayBuffer(8);
+const captureOptions: SnapshotCaptureOptions = {
+  profileId: 'dsl-2024'
+};
+expectType<Promise<SnapshotMetadata>>(captureSnapshot(captureSource, captureOptions));
+
+const importOptions: SnapshotImportOptions = {
+  profileId: 'dsl-2024'
+};
+expectType<Promise<SnapshotMetadata>>(importSnapshot(new File([], 'state.bin'), importOptions));
+expectType<Promise<SnapshotMetadata>>(importSnapshot('https://example.com/state.bin', importOptions));
+expectError(importSnapshot(123));
+
+expectType<Promise<SnapshotMetadata | null>>(renameSnapshot('id', 'new-name'));
+expectType<Promise<Blob>>(exportSnapshot('id').then((result) => result.blob));

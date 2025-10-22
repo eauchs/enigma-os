@@ -1,0 +1,48 @@
+import { expectError, expectType } from 'tsd';
+import { AgentProfile, agentProfiles } from '../../src/config/agentProfiles';
+
+expectType<AgentProfile[]>(agentProfiles);
+
+const firstProfile = agentProfiles[0];
+expectType<string>(firstProfile.id);
+expectType<string>(firstProfile.name);
+expectType<string>(firstProfile.accent);
+expectType<number | undefined>(firstProfile.emulator.memorySize);
+expectType<string | undefined>(firstProfile.snapshotHint);
+
+expectType<string>(firstProfile.manualSteps[0]?.title ?? '');
+expectType<string | undefined>(firstProfile.manualSteps[0]?.command);
+expectType<string>(firstProfile.assetManifest[0].path);
+expectType<boolean | undefined>(firstProfile.assetManifest[0].optional);
+
+expectError(() => {
+  const invalid: AgentProfile = {
+    id: 'invalid',
+    name: 'Broken profile',
+    tagline: 'Invalid',
+    description: 'Missing emulator',
+    accent: '#000000',
+    automation: firstProfile.automation,
+    manualSteps: [],
+    assetManifest: [],
+    emulator: {
+      // memorySize must be numeric
+      memorySize: '1024'
+    }
+  };
+  return invalid;
+});
+
+expectError(() => {
+  const invalidAssetProfile: AgentProfile = {
+    ...firstProfile,
+    assetManifest: [
+      {
+        label: 'Broken asset',
+        // path must be a string, not a number
+        path: 123
+      }
+    ]
+  };
+  return invalidAssetProfile;
+});

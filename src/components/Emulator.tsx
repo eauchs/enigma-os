@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useRef, useEffect } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef, useEffect, useMemo } from 'react';
 
 // On définit les types pour que TypeScript comprenne ce que notre composant peut faire
 export interface EmulatorRef {
@@ -10,27 +10,86 @@ export interface EmulatorRef {
   saveState: () => Promise<ArrayBuffer | null>;
 }
 
+export interface EmulatorBootDisk {
+  url: string;
+  async?: boolean;
+}
+
+export interface EmulatorBootConfig {
+  wasmPath?: string;
+  bios?: { url: string };
+  vgaBios?: { url: string };
+  memorySize?: number;
+  hda?: EmulatorBootDisk | false;
+  cdrom?: EmulatorBootDisk | false;
+  bootOrder?: number;
+  extraConfig?: Record<string, unknown>;
+}
+
+export interface EmulatorDownloadEvent {
+  fileName: string;
+  loaded: number;
+  total?: number;
+  lengthComputable: boolean;
+}
+
+export interface EmulatorDownloadError {
+  fileName: string;
+  status?: number;
+  statusText?: string;
+}
+
+interface V86Instance {
+  add_listener: (event: string, callback: (...args: unknown[]) => void) => void;
+  serial0_send?: (text: string) => void;
+  keyboard_send_text?: (text: string) => void;
+  save_state?: () => Promise<ArrayBuffer>;
+  destroy?: () => void;
+}
+
+type V86StarterConstructor = new (config: Record<string, unknown>) => V86Instance;
+
 interface EmulatorProps {
   initialState?: ArrayBuffer | null;
   onReady?: () => void;
   onOutput?: (chunk: string) => void;
+  onDownloadProgress?: (event: EmulatorDownloadEvent) => void;
+  onDownloadError?: (event: EmulatorDownloadError) => void;
+  onError?: (error: Error) => void;
+  emulatorConfig?: EmulatorBootConfig;
+  className?: string;
 }
 
 // Déclaration globale pour que TypeScript connaisse V86Starter
 declare global {
   interface Window {
-    V86Starter: any;
-    V86?: any;
+    V86Starter?: V86StarterConstructor;
+    V86?: V86StarterConstructor;
   }
 }
 
 // On type les props et la ref
-const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady, onOutput }, ref) => {
+const Emulator = forwardRef<EmulatorRef, EmulatorProps>(
+  (
+    {
+      initialState,
+      onReady,
+      onOutput,
+      onDownloadProgress,
+      onDownloadError,
+      onError,
+      emulatorConfig,
+      className
+    },
+    ref
+  ) => {
   const screenContainerRef = useRef<HTMLDivElement>(null);
-  const emulatorInstance = useRef<any>(null);
+  const emulatorInstance = useRef<V86Instance | null>(null);
   const latestOnReady = useRef(onReady);
   const latestOnOutput = useRef(onOutput);
-  const hasBootstrapped = useRef(false);
+  const latestOnDownloadProgress = useRef(onDownloadProgress);
+  const latestOnDownloadError = useRef(onDownloadError);
+  const latestOnError = useRef(onError);
   const hasAnnouncedReady = useRef(false);
   const lineBufferRef = useRef<string>('');
 
@@ -41,6 +100,18 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady
   useEffect(() => {
     latestOnOutput.current = onOutput;
   }, [onOutput]);
+
+  useEffect(() => {
+    latestOnDownloadProgress.current = onDownloadProgress;
+  }, [onDownloadProgress]);
+
+  useEffect(() => {
+    latestOnDownloadError.current = onDownloadError;
+  }, [onDownloadError]);
+
+  useEffect(() => {
+    latestOnError.current = onError;
+  }, [onError]);
 
   useEffect(() => {
     let isDisposed = false;
@@ -121,34 +192,67 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady
         return;
       }
 
-      const config: any = {
+      const resolvedMemory = (emulatorConfig?.memorySize ?? 768) * 1024 * 1024;
+      const config: Record<string, unknown> = {
         screen_container: screenContainerRef.current,
         keyboard_element: screenContainerRef.current,
-        wasm_path: "/v86/v86.wasm",
-        bios: { url: "/v86/seabios.bin" },
-        vga_bios: { url: "/v86/vgabios.bin" },
-        memory_size: 768 * 1024 * 1024,
+        wasm_path: emulatorConfig?.wasmPath ?? '/v86/v86.wasm',
+        bios: emulatorConfig?.bios ?? { url: '/v86/seabios.bin' },
+        vga_bios: emulatorConfig?.vgaBios ?? { url: '/v86/vgabios.bin' },
+        memory_size: resolvedMemory,
         preserve_mac_from_state_image: true,
         uart_output_all: true,
-        autostart: true,
-        hda: { url: "/images/dsl_disk.img", async: false }
+        autostart: true
       };
 
-      if (initialState) {
-        console.log("Restoring agent from saved Âme...");
-        config.initial_state = initialState;
-      } else {
-        console.log("First boot detected. Booting DSL ISO.");
-        config.cdrom = { url: "/images/dsl-2024.rc7.iso", async: false };
-        config.boot_order = 0x132;
+      const resolvedHda = emulatorConfig?.hda === false ? null : emulatorConfig?.hda ?? { url: '/images/dsl_disk.img', async: false };
+      if (resolvedHda) {
+        config.hda = resolvedHda;
       }
 
-      const instance = new window.V86Starter(config);
+      if (initialState) {
+        console.log('Restoring agent from saved Âme...');
+        config.initial_state = initialState;
+      } else {
+        console.log('First boot detected. Loading base media.');
+        const resolvedCdrom = emulatorConfig?.cdrom === false ? null : emulatorConfig?.cdrom ?? {
+          url: '/images/dsl-2024.rc7.iso',
+          async: false
+        };
+        if (resolvedCdrom) {
+          config.cdrom = resolvedCdrom;
+        }
+        if (typeof emulatorConfig?.bootOrder === 'number') {
+          config.boot_order = emulatorConfig.bootOrder;
+        } else if (resolvedCdrom) {
+          config.boot_order = 0x132;
+        }
+      }
+
+      if (initialState && typeof emulatorConfig?.bootOrder === 'number') {
+        config.boot_order = emulatorConfig.bootOrder;
+      }
+
+      if (emulatorConfig?.extraConfig && typeof emulatorConfig.extraConfig === 'object') {
+        Object.assign(config, emulatorConfig.extraConfig);
+      }
+
+      let instance: V86Instance | null = null;
+      try {
+        instance = new window.V86Starter(config);
+      } catch (error) {
+        console.error('Failed to start the v86 emulator.', error);
+        const errorCallback = latestOnError.current;
+        if (errorCallback) {
+          errorCallback(error instanceof Error ? error : new Error(String(error)));
+        }
+        return;
+      }
       emulatorInstance.current = instance;
       hasAnnouncedReady.current = false;
       lineBufferRef.current = '';
 
-      instance.add_listener("emulator-ready", () => {
+      instance.add_listener('emulator-ready', () => {
         console.log("Emulator is technically ready.");
         screenContainerRef.current?.focus();
         const readyCb = latestOnReady.current;
@@ -158,7 +262,7 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady
         }
       });
 
-      instance.add_listener("serial0-output-byte", (charCode: number) => {
+      instance.add_listener('serial0-output-byte', (charCode: number) => {
         const char = String.fromCharCode(charCode);
         const latestOutput = latestOnOutput.current;
         if (char === '\r') {
@@ -195,6 +299,41 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady
           }
         }
       });
+
+      instance.add_listener('download-progress', (event: unknown) => {
+        const progressEvent = event as {
+          file_name?: string;
+          loaded?: number;
+          total?: number;
+          lengthComputable?: boolean;
+        };
+        const progressCb = latestOnDownloadProgress.current;
+        if (!progressCb) {
+          return;
+        }
+        progressCb({
+          fileName: progressEvent?.file_name ?? 'resource',
+          loaded: typeof progressEvent?.loaded === 'number' ? progressEvent.loaded : 0,
+          total: typeof progressEvent?.total === 'number' ? progressEvent.total : undefined,
+          lengthComputable: Boolean(progressEvent?.lengthComputable)
+        });
+      });
+
+      instance.add_listener('download-error', (event: unknown) => {
+        const downloadEvent = event as {
+          file_name?: string;
+          request?: { status?: number; statusText?: string };
+        };
+        const errorCb = latestOnDownloadError.current;
+        if (!errorCb) {
+          return;
+        }
+        errorCb({
+          fileName: downloadEvent?.file_name ?? 'resource',
+          status: downloadEvent?.request?.status,
+          statusText: downloadEvent?.request?.statusText
+        });
+      });
     };
 
     ensureV86Script()
@@ -215,7 +354,7 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady
         emulatorInstance.current = null;
       }
     };
-  }, [initialState]);
+  }, [initialState, emulatorConfig]);
 
   // Expose les fonctions au composant parent (App.tsx)
   useImperativeHandle(ref, () => ({
@@ -282,17 +421,56 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady
   }));
 
   // Le conteneur doit déjà contenir un <canvas> et une <div> pour que v86 l'initialise correctement
+  const containerClassName = ['emulator-container', className].filter(Boolean).join(' ');
+
+  const bootMedia = useMemo(
+    () => [
+      { label: 'Disk', available: emulatorConfig?.hda !== false },
+      { label: 'ISO', available: emulatorConfig?.cdrom !== false }
+    ],
+    [emulatorConfig?.cdrom, emulatorConfig?.hda]
+  );
+
+  const memorySizeMb = useMemo(() => emulatorConfig?.memorySize ?? 768, [emulatorConfig?.memorySize]);
+
+  const bootAssetsMissing = useMemo(() => {
+    const hasDisk = emulatorConfig?.hda !== false;
+    const hasCdrom = emulatorConfig?.cdrom !== false;
+    return !initialState && !hasDisk && !hasCdrom;
+  }, [emulatorConfig?.cdrom, emulatorConfig?.hda, initialState]);
+
   return (
     <div
       ref={screenContainerRef}
       tabIndex={0}
-      style={{ width: '100%', height: '100%', background: 'black', outline: 'none' }}
+      className={containerClassName}
       onClick={() => screenContainerRef.current?.focus()}
     >
-      <canvas style={{ width: '100%', height: '100%' }} />
+      <div className="emulator-status-bar" data-testid="emulator-status-bar">
+        <span className="emulator-status-pill" data-testid="memory-status">
+          {memorySizeMb} MB
+        </span>
+        {bootMedia.map((media) => (
+          <span
+            key={media.label}
+            className={`emulator-status-pill ${media.available ? 'available' : 'missing'}`}
+            data-testid={`media-${media.label.toLowerCase()}`}
+          >
+            {media.label}
+          </span>
+        ))}
+      </div>
+      {bootAssetsMissing ? (
+        <div className="emulator-status-error" data-testid="asset-error">
+          No boot assets configured. Provide a disk or ISO to launch the VM.
+        </div>
+      ) : null}
+      <canvas />
       <div></div>
     </div>
   );
 });
+
+Emulator.displayName = 'Emulator';
 
 export default Emulator;

@@ -124,6 +124,9 @@ public/images/dsl_disk.img
 public/images/dsl-*.iso
 public/images/dsl_*.img
 
+# Playwright artifacts
+test-results/
+
 # Build artifacts
 node_modules/
 out/
