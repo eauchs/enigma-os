@@ -1,0 +1,194 @@
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import App from '../App';
+import { server } from '../setupTests';
+import type { SnapshotMetadata } from '../services/snapshotVault';
+
+const {
+  snapshotStore,
+  listSnapshotsMock,
+  storeSnapshotMock,
+  loadSnapshotDataMock,
+  removeSnapshotMock,
+  renameSnapshotMock,
+  ensureVaultMigratedMock,
+  getStoredActiveSnapshotIdMock,
+  storeActiveSnapshotIdMock
+} = vi.hoisted(() => {
+  const store = new Map<string, { metadata: SnapshotMetadata; buffer: ArrayBuffer }>();
+  return {
+    snapshotStore: store,
+    listSnapshotsMock: vi.fn(),
+    storeSnapshotMock: vi.fn(),
+    loadSnapshotDataMock: vi.fn(),
+    removeSnapshotMock: vi.fn(),
+    renameSnapshotMock: vi.fn(),
+    ensureVaultMigratedMock: vi.fn(),
+    getStoredActiveSnapshotIdMock: vi.fn(),
+    storeActiveSnapshotIdMock: vi.fn()
+  };
+});
+
+vi.mock('../services/snapshotVault', async () => ({
+  ensureVaultMigrated: ensureVaultMigratedMock,
+  listSnapshots: listSnapshotsMock,
+  loadSnapshotData: loadSnapshotDataMock,
+  storeSnapshot: storeSnapshotMock,
+  removeSnapshot: removeSnapshotMock,
+  renameSnapshot: renameSnapshotMock,
+  clearSnapshotVault: vi.fn(async () => snapshotStore.clear()),
+  getStoredActiveSnapshotId: getStoredActiveSnapshotIdMock,
+  storeActiveSnapshotId: storeActiveSnapshotIdMock
+}));
+
+vi.mock('../components/Emulator', () => {
+  return {
+    default: vi
+      .fn()
+      .mockImplementation(
+        ({ onReady, className }: { onReady?: () => void; className?: string }, ref: React.Ref<unknown>) => {
+          const saveState = vi.fn(async () => new ArrayBuffer(4));
+          if (ref && typeof ref === 'object') {
+            (ref as React.MutableRefObject<unknown>).current = {
+              runCommand: vi.fn(),
+              runSerialCommand: vi.fn(),
+              runKeyboardCommand: vi.fn(),
+              serial0_send: vi.fn(),
+              keyboardType: vi.fn(),
+              saveState
+            };
+          }
+          onReady?.();
+          return (
+            <div data-testid="emulator-mock" className={className}>
+              Emulator mock
+            </div>
+          );
+        }
+      )
+  };
+});
+
+describe('App integration', () => {
+  beforeEach(() => {
+    snapshotStore.clear();
+    listSnapshotsMock.mockReset();
+    storeSnapshotMock.mockReset();
+    loadSnapshotDataMock.mockReset();
+    removeSnapshotMock.mockReset();
+    renameSnapshotMock.mockReset();
+    ensureVaultMigratedMock.mockReset();
+    getStoredActiveSnapshotIdMock.mockReset();
+    storeActiveSnapshotIdMock.mockReset();
+
+    listSnapshotsMock.mockImplementation(async () => {
+      return Array.from(snapshotStore.values()).map((entry) => entry.metadata).sort((a, b) => b.savedAt - a.savedAt);
+    });
+
+    storeSnapshotMock.mockImplementation(async ({ buffer, name, profileId }: { buffer: ArrayBuffer; name: string; profileId?: string }) => {
+      const id = `${Date.now()}-${Math.random()}`;
+      const metadata: SnapshotMetadata = {
+        id,
+        name,
+        size: buffer.byteLength,
+        savedAt: Date.now(),
+        profileId
+      };
+      snapshotStore.set(id, { metadata, buffer });
+      return metadata;
+    });
+
+    loadSnapshotDataMock.mockImplementation(async (id: string) => snapshotStore.get(id)?.buffer ?? null);
+    removeSnapshotMock.mockImplementation(async (id: string) => {
+      snapshotStore.delete(id);
+    });
+    renameSnapshotMock.mockImplementation(async (id: string, newName: string) => {
+      const record = snapshotStore.get(id);
+      if (!record) {
+        return null;
+      }
+      record.metadata = { ...record.metadata, name: newName };
+      snapshotStore.set(id, record);
+      return record.metadata;
+    });
+    ensureVaultMigratedMock.mockResolvedValue(undefined);
+    getStoredActiveSnapshotIdMock.mockReturnValue(null);
+    storeActiveSnapshotIdMock.mockReturnValue(undefined);
+    server.resetHandlers();
+    server.use(
+      http.head('/images/dsl_disk.img', () => HttpResponse.text('', { headers: { 'Content-Length': '1024' } })),
+      http.head('/images/dsl-2024.rc7.iso', () => HttpResponse.text('', { headers: { 'Content-Length': '2048' } }))
+    );
+  });
+
+  it('walks through the happy path workflow', async () => {
+    render(<App />);
+    const user = userEvent.setup();
+
+    await screen.findByText(/No Âme stored yet/i);
+
+    const importFile = new File([new Uint8Array([1, 2, 3])], 'imported.bin', { type: 'application/octet-stream' });
+    const fileInput = screen.getByTestId('snapshot-file-input');
+    await user.upload(fileInput, importFile);
+
+    await screen.findByText('imported.bin');
+    expect(storeSnapshotMock).toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /Capture from VM/i }));
+    await screen.findByRole('button', { name: /Captured-/i });
+
+    const listItems = screen.getAllByRole('listitem');
+    const snapshotItem = listItems.find((item) => within(item).queryByText('imported.bin'));
+    if (!snapshotItem) {
+      throw new Error('Snapshot item not found');
+    }
+
+    await user.click(within(snapshotItem).getByRole('button', { name: 'Rename' }));
+    const renameInput = within(snapshotItem).getByRole('textbox');
+    await user.clear(renameInput);
+    await user.type(renameInput, 'renamed.bin');
+    await user.click(within(snapshotItem).getByRole('button', { name: 'Save' }));
+
+    await screen.findByText('renamed.bin');
+
+    const createElementSpy = vi.spyOn(document, 'createElement');
+    const clickSpy = vi.fn();
+    createElementSpy.mockImplementation((tagName: string) => {
+      const element = Document.prototype.createElement.call(document, tagName);
+      if (tagName === 'a') {
+        element.click = clickSpy;
+      }
+      return element;
+    });
+    const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock');
+    const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+
+    const exportButton = within(snapshotItem).getByRole('button', { name: 'Export' });
+    await user.click(exportButton);
+
+    expect(clickSpy).toHaveBeenCalled();
+    expect(createObjectURLSpy).toHaveBeenCalled();
+    expect(revokeObjectURLSpy).toHaveBeenCalled();
+
+    createElementSpy.mockRestore();
+    createObjectURLSpy.mockRestore();
+    revokeObjectURLSpy.mockRestore();
+  });
+
+  it('surfaces errors when imports fail and keeps state untouched', async () => {
+    storeSnapshotMock.mockRejectedValueOnce(new Error('network failure'));
+    render(<App />);
+    const user = userEvent.setup();
+
+    await screen.findByText(/No Âme stored yet/i);
+
+    const importFile = new File([new Uint8Array([9, 9, 9])], 'failing.bin', { type: 'application/octet-stream' });
+    const fileInput = screen.getByTestId('snapshot-file-input');
+    await user.upload(fileInput, importFile);
+
+    await screen.findByText(/Snapshot import failed/i);
+    expect(screen.queryByText('failing.bin')).not.toBeInTheDocument();
+  });
+});

@@ -40,6 +40,29 @@ L’objectif reste de livrer un agent autonome capable d’exécuter une boucle 
    npm run build
    ```
 
+## Tests
+
+L’outillage de test couvre les types, les hooks/services, l’intégration de l’hôte et un parcours E2E Playwright.
+
+```bash
+# assertions de types + Vitest en mode run
+npm run test
+
+# surveillance continue
+npm run test:watch
+
+# rapport de couverture (seuil 85 %)
+npm run test:cov
+
+# lint complet des sources et des tests
+npm run lint
+
+# scénario Playwright avec serveur preview
+npm run e2e
+```
+
+Vitest initialise automatiquement MSW (`src/setupTests.ts`) et polyfill IndexedDB via `fake-indexeddb`, ce qui permet de rejouer toutes les interactions du coffre d’Âmes sans navigateur réel.
+
 ## Utiliser le coffre d’Âmes
 - **Import** : bouton « Import Âme » (snapshots `.bin` non compressés) → stockage dans IndexedDB → relance automatique.
 - **Capture** : une fois votre VM configurée, cliquez sur « Capture from VM » pour figer l’état courant. Un nouveau snapshot daté est ajouté au coffre et utilisé immédiatement.

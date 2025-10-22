@@ -250,7 +250,7 @@ import { BootStage, StageContent, BootStageContentSet, BOOT_STAGE_ORDER } from '
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activeProfile.id, activeProfile.name]);
 
    useEffect(() => {
      if (!availableSnapshots.length) {
@@ -1192,13 +1192,14 @@ import { BootStage, StageContent, BootStageContentSet, BOOT_STAGE_ORDER } from '
                    Capture from VM
                  </button>
                </div>
-               <input
-                 ref={snapshotInputRef}
-                 type="file"
-                 accept=".bin,application/octet-stream"
-                 onChange={handleSnapshotFileChange}
-                 hidden
-               />
+              <input
+                ref={snapshotInputRef}
+                type="file"
+                accept=".bin,application/octet-stream"
+                onChange={handleSnapshotFileChange}
+                data-testid="snapshot-file-input"
+                hidden
+              />
              </div>
 
              <div className="info-card asset-card">

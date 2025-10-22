@@ -20,6 +20,41 @@ export type SnapshotMetadata = {
   profileId?: string;
 };
 
+export type SnapshotOperationStatus = 'PENDING' | 'IN_PROGRESS' | 'SUCCESS' | 'ERROR' | 'CANCELLED';
+
+export interface SnapshotProgressUpdate {
+  id?: string | null;
+  status: SnapshotOperationStatus;
+  progress: number;
+  loaded?: number;
+  total?: number;
+  message?: string;
+  error?: Error;
+}
+
+export type SnapshotImportSource = File | { url: string; fileName?: string } | Blob | string;
+
+export interface SnapshotImportOptions {
+  profileId?: string;
+  signal?: AbortSignal;
+  onProgress?: (update: SnapshotProgressUpdate) => void;
+  name?: string;
+  timestamp?: number;
+}
+
+export interface SnapshotCaptureOptions {
+  profileId?: string;
+  signal?: AbortSignal;
+  onProgress?: (update: SnapshotProgressUpdate) => void;
+  name?: string;
+  timestamp?: number;
+}
+
+export interface SnapshotExportResult {
+  blob: Blob;
+  metadata: SnapshotMetadata;
+}
+
 export interface SaveSnapshotParams {
   buffer: ArrayBuffer;
   name?: string;
@@ -35,6 +70,73 @@ const isArrayBuffer = (value: unknown): value is ArrayBuffer => {
 const safeNumber = (value: unknown, fallback: number): number => {
   const numeric = typeof value === 'number' && Number.isFinite(value) ? value : Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+const asError = (value: unknown): Error => {
+  if (value instanceof Error) {
+    return value;
+  }
+  return new Error(typeof value === 'string' ? value : JSON.stringify(value));
+};
+
+const createAbortError = () => {
+  try {
+    return new DOMException('The operation was aborted.', 'AbortError');
+  } catch {
+    const abortError = new Error('The operation was aborted.');
+    abortError.name = 'AbortError';
+    return abortError;
+  }
+};
+
+const isAbortError = (error: unknown) => {
+  if (!error) {
+    return false;
+  }
+  const message = (error as Error)?.message ?? '';
+  const name = (error as Error)?.name ?? '';
+  return name === 'AbortError' || message.toLowerCase().includes('abort');
+};
+
+const emitProgress = (
+  callback: ((update: SnapshotProgressUpdate) => void) | undefined,
+  update: SnapshotProgressUpdate
+) => {
+  if (typeof callback === 'function') {
+    callback(update);
+  }
+};
+
+const throwIfAborted = (signal: AbortSignal | undefined) => {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+};
+
+const concatenateChunks = (chunks: Uint8Array[], totalSize: number): ArrayBuffer => {
+  const merged = new Uint8Array(totalSize);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged.buffer;
+};
+
+const nameFromUrl = (input: string): string => {
+  if (!input) {
+    return 'snapshot.bin';
+  }
+  try {
+    const url = new URL(input, typeof window !== 'undefined' ? window.location.href : 'http://localhost');
+    const segments = url.pathname.split('/').filter(Boolean);
+    const candidate = segments[segments.length - 1];
+    return candidate && candidate.length ? candidate : 'snapshot.bin';
+  } catch {
+    const sanitized = input.split('?')[0]?.split('#')[0] ?? input;
+    const segments = sanitized.split('/').filter(Boolean);
+    return segments[segments.length - 1] ?? 'snapshot.bin';
+  }
 };
 
 const generateSnapshotId = () => {
@@ -131,6 +233,195 @@ export const storeSnapshot = async ({ buffer, name, id, savedAt, profileId }: Sa
   nextEntries.sort((a, b) => b.savedAt - a.savedAt);
   await writeIndex(nextEntries);
   return metadata;
+};
+
+export const importSnapshot = async (
+  source: SnapshotImportSource,
+  options: SnapshotImportOptions = {}
+): Promise<SnapshotMetadata> => {
+  const { profileId, signal, onProgress, name, timestamp } = options;
+  const startedAt = safeNumber(timestamp, Date.now());
+  let loadedBytes = 0;
+  let totalBytes: number | undefined;
+
+  const emit = (update: SnapshotProgressUpdate) => emitProgress(onProgress, update);
+
+  try {
+    throwIfAborted(signal);
+    emit({ status: 'IN_PROGRESS', progress: 0, message: 'Preparing snapshot import' });
+
+    let buffer: ArrayBuffer;
+    let resolvedName = name?.trim() || 'snapshot.bin';
+
+    if (typeof File !== 'undefined' && source instanceof File) {
+      resolvedName = name?.trim() || source.name || resolvedName;
+      buffer = await source.arrayBuffer();
+      loadedBytes = buffer.byteLength;
+      totalBytes = buffer.byteLength;
+    } else if (typeof Blob !== 'undefined' && source instanceof Blob) {
+      buffer = await source.arrayBuffer();
+      loadedBytes = buffer.byteLength;
+      totalBytes = buffer.byteLength;
+    } else {
+      const url = typeof source === 'string' ? source : source.url;
+      resolvedName =
+        name?.trim() || (typeof source === 'string' ? nameFromUrl(source) : source.fileName ?? nameFromUrl(url));
+
+      const response = await fetch(url, { signal });
+      if (!response.ok) {
+        throw new Error(`Failed to download snapshot (${response.status})`);
+      }
+
+      const headerSize = response.headers.get('content-length');
+      const parsedSize = headerSize ? Number(headerSize) : undefined;
+      totalBytes = Number.isFinite(parsedSize) ? Number(parsedSize) : undefined;
+
+      if (response.body && typeof response.body.getReader === 'function') {
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        loadedBytes = 0;
+        while (true) {
+          throwIfAborted(signal);
+          const { value, done } = await reader.read();
+          if (done) {
+            break;
+          }
+          if (value) {
+            chunks.push(value);
+            loadedBytes += value.byteLength;
+            const progress = totalBytes
+              ? Math.min(99, Math.floor((loadedBytes / totalBytes) * 100))
+              : Math.min(95, chunks.length > 0 ? 50 + Math.min(45, loadedBytes / 1024) : 10);
+            emit({
+              status: 'IN_PROGRESS',
+              progress,
+              loaded: loadedBytes,
+              total: totalBytes,
+              message: 'Downloading snapshot…'
+            });
+          }
+        }
+        buffer = concatenateChunks(chunks, loadedBytes);
+      } else {
+        buffer = await response.arrayBuffer();
+        loadedBytes = buffer.byteLength;
+        totalBytes = buffer.byteLength;
+      }
+    }
+
+    throwIfAborted(signal);
+
+    emit({
+      status: 'IN_PROGRESS',
+      progress: totalBytes ? Math.min(99, Math.floor((loadedBytes / totalBytes) * 100)) : 95,
+      loaded: loadedBytes,
+      total: totalBytes,
+      message: 'Persisting snapshot to vault…'
+    });
+
+    const metadata = await storeSnapshot({
+      buffer,
+      name: resolvedName,
+      savedAt: startedAt,
+      profileId
+    });
+
+    emit({
+      id: metadata.id,
+      status: 'SUCCESS',
+      progress: 100,
+      loaded: buffer.byteLength,
+      total: buffer.byteLength,
+      message: 'Snapshot imported successfully'
+    });
+
+    return metadata;
+  } catch (error) {
+    const resolvedError = asError(error);
+    if (isAbortError(resolvedError) || signal?.aborted) {
+      emit({ status: 'CANCELLED', progress: 0, error: resolvedError, message: 'Snapshot import cancelled' });
+    } else {
+      emit({ status: 'ERROR', progress: 0, error: resolvedError, message: 'Snapshot import failed' });
+    }
+    throw resolvedError;
+  }
+};
+
+export type SnapshotCaptureSource = () => Promise<ArrayBuffer>;
+
+export const captureSnapshot = async (
+  source: SnapshotCaptureSource,
+  options: SnapshotCaptureOptions = {}
+): Promise<SnapshotMetadata> => {
+  const { profileId, signal, onProgress, name, timestamp } = options;
+  const emit = (update: SnapshotProgressUpdate) => emitProgress(onProgress, update);
+
+  try {
+    throwIfAborted(signal);
+    emit({ status: 'IN_PROGRESS', progress: 0, message: 'Capturing snapshot from emulator' });
+
+    const buffer = await source();
+    throwIfAborted(signal);
+
+    emit({
+      status: 'IN_PROGRESS',
+      progress: 60,
+      loaded: buffer.byteLength,
+      total: buffer.byteLength,
+      message: 'Persisting captured snapshot…'
+    });
+
+    const metadata = await storeSnapshot({
+      buffer,
+      name: name?.trim() || undefined,
+      savedAt: safeNumber(timestamp, Date.now()),
+      profileId
+    });
+
+    emit({
+      id: metadata.id,
+      status: 'SUCCESS',
+      progress: 100,
+      loaded: buffer.byteLength,
+      total: buffer.byteLength,
+      message: 'Snapshot captured successfully'
+    });
+
+    return metadata;
+  } catch (error) {
+    const resolvedError = asError(error);
+    if (isAbortError(resolvedError) || signal?.aborted) {
+      emit({ status: 'CANCELLED', progress: 0, error: resolvedError, message: 'Snapshot capture cancelled' });
+    } else {
+      emit({ status: 'ERROR', progress: 0, error: resolvedError, message: 'Snapshot capture failed' });
+    }
+    throw resolvedError;
+  }
+};
+
+export const exportSnapshot = async (id: string): Promise<SnapshotExportResult> => {
+  if (!id) {
+    throw new Error('Snapshot id is required to export.');
+  }
+  const metadataList = await listSnapshots();
+  const metadata = metadataList.find((entry) => entry.id === id);
+  if (!metadata) {
+    throw new Error(`Snapshot with id ${id} was not found.`);
+  }
+  const buffer = await loadSnapshotData(id);
+  if (!buffer) {
+    throw new Error('Snapshot payload is empty.');
+  }
+  const blob = new Blob([buffer], { type: 'application/octet-stream' });
+  return { blob, metadata };
+};
+
+export const selectSnapshotsByProfile = async (profileId?: string | null): Promise<SnapshotMetadata[]> => {
+  const snapshots = await listSnapshots();
+  if (!profileId) {
+    return snapshots;
+  }
+  return snapshots.filter((snapshot) => !snapshot.profileId || snapshot.profileId === profileId);
 };
 
 export const removeSnapshot = async (id: string) => {
