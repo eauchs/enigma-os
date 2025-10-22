@@ -114,6 +114,13 @@ export const useSnapshotStorage = () => {
     []
   );
 
+  const handleImportFailure = useCallback((error: unknown) => {
+    console.error('Failed to import snapshot', error);
+    setSnapshotStage('error');
+    setSnapshotError((error as Error)?.message ?? 'Failed to import snapshot.');
+    setSnapshotSource('none');
+  }, []);
+
   const importSnapshotFromFile = useCallback(
     async (file: File): Promise<StoredSnapshotRecord> => {
       const lowerName = file.name.toLowerCase();
@@ -122,33 +129,43 @@ export const useSnapshotStorage = () => {
       }
       setSnapshotStage('importing');
       setSnapshotError(null);
-      const buffer = await file.arrayBuffer();
-      return storeSnapshotFromBuffer(
-        buffer,
-        { name: file.name, size: file.size, savedAt: Date.now() },
-        { source: 'uploaded' }
-      );
+      try {
+        const buffer = await file.arrayBuffer();
+        return await storeSnapshotFromBuffer(
+          buffer,
+          { name: file.name, size: file.size, savedAt: Date.now() },
+          { source: 'uploaded' }
+        );
+      } catch (error) {
+        handleImportFailure(error);
+        throw error;
+      }
     },
-    [storeSnapshotFromBuffer]
+    [handleImportFailure, storeSnapshotFromBuffer]
   );
 
   const importSnapshotFromUrl = useCallback(
     async (url: string): Promise<StoredSnapshotRecord> => {
       setSnapshotStage('importing');
       setSnapshotError(null);
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to download snapshot (${response.status} ${response.statusText})`);
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to download snapshot (${response.status} ${response.statusText})`);
+        }
+        const buffer = await response.arrayBuffer();
+        const resourceName = normalizeResourceName(url);
+        return await storeSnapshotFromBuffer(
+          buffer,
+          { name: resourceName, size: buffer.byteLength, savedAt: Date.now() },
+          { source: 'remote' }
+        );
+      } catch (error) {
+        handleImportFailure(error);
+        throw error;
       }
-      const buffer = await response.arrayBuffer();
-      const resourceName = normalizeResourceName(url);
-      return storeSnapshotFromBuffer(
-        buffer,
-        { name: resourceName, size: buffer.byteLength, savedAt: Date.now() },
-        { source: 'remote' }
-      );
     },
-    [storeSnapshotFromBuffer]
+    [handleImportFailure, storeSnapshotFromBuffer]
   );
 
   const forgetSnapshot = useCallback(async () => {
