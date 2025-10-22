@@ -48,14 +48,21 @@ describe('useSnapshotVault', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    await expect(
-      act(async () => {
-        await result.current.importFromSource(file);
-      })
-    ).rejects.toThrow();
+    let caught: unknown;
+    try {
+      await act(async () => {
+        try {
+          await result.current.importFromSource(file);
+        } catch (error) {
+          caught = error;
+        }
+      });
+    } finally {
+      spy.mockRestore();
+    }
 
-    expect(result.current.error).toBe('boom');
-    spy.mockRestore();
+    expect((caught as Error)?.message).toBe('boom');
+    await waitFor(() => expect(result.current.error).toBe('boom'));
   });
 
   it('captures snapshots and allows cancellation mid-flight', async () => {
@@ -79,15 +86,19 @@ describe('useSnapshotVault', () => {
         return Promise.reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
       });
 
-    await expect(
-      act(async () => {
+    let captureError: unknown;
+    await act(async () => {
+      try {
         const promise = result.current.capture(async () => createBuffer(4));
         result.current.cancelCurrent();
         await promise;
-      })
-    ).rejects.toThrow();
+      } catch (error) {
+        captureError = error;
+      }
+    });
 
-    expect(result.current.progressLog.at(-1)?.status).toBe('CANCELLED');
+    expect(captureError).toBeInstanceOf(Error);
+    await waitFor(() => expect(result.current.progressLog.at(-1)?.status).toBe('CANCELLED'));
     expect(result.current.error).toBeNull();
     captureSpy.mockRestore();
   });
@@ -123,9 +134,15 @@ describe('useSnapshotVault', () => {
       await result.current.rename(snapshot.id, 'renamed.bin');
     });
 
-    expect(result.current.entries[0].name).toBe('renamed.bin');
+    await waitFor(() => expect(result.current.entries[0].name).toBe('renamed.bin'));
 
-    const { blob } = await result.current.exportSnapshot(snapshot.id);
-    expect(blob.size).toBeGreaterThan(0);
+    let exportBlob: Blob | null = null;
+    await act(async () => {
+      const resultData = await result.current.exportSnapshot(snapshot.id);
+      exportBlob = resultData.blob;
+    });
+
+    expect(exportBlob).not.toBeNull();
+    expect(exportBlob?.size ?? 0).toBeGreaterThan(0);
   });
 });

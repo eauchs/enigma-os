@@ -1,30 +1,47 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { forwardRef, useImperativeHandle, useMemo } from 'react';
 import App from '../App';
+import { server } from '../setupTests';
 import type { SnapshotMetadata } from '../services/snapshotVault';
 
-const snapshotStore: Map<string, { metadata: SnapshotMetadata; buffer: ArrayBuffer }> = new Map();
-
-let listSnapshotsMock: ReturnType<typeof vi.fn>;
-let storeSnapshotMock: ReturnType<typeof vi.fn>;
-let loadSnapshotDataMock: ReturnType<typeof vi.fn>;
-let ensureVaultMigratedMock: ReturnType<typeof vi.fn>;
-let getStoredActiveSnapshotIdMock: ReturnType<typeof vi.fn>;
-let storeActiveSnapshotIdMock: ReturnType<typeof vi.fn>;
+const {
+  snapshotStore,
+  listSnapshotsMock,
+  storeSnapshotMock,
+  loadSnapshotDataMock,
+  ensureVaultMigratedMock,
+  getStoredActiveSnapshotIdMock,
+  storeActiveSnapshotIdMock
+} = vi.hoisted(() => {
+  const store = new Map<string, { metadata: SnapshotMetadata; buffer: ArrayBuffer }>();
+  return {
+    snapshotStore: store,
+    listSnapshotsMock: vi.fn(),
+    storeSnapshotMock: vi.fn(),
+    loadSnapshotDataMock: vi.fn(),
+    ensureVaultMigratedMock: vi.fn(),
+    getStoredActiveSnapshotIdMock: vi.fn(),
+    storeActiveSnapshotIdMock: vi.fn()
+  };
+});
 
 vi.mock('../services/snapshotVault', async () => {
-  listSnapshotsMock = vi.fn(async () => Array.from(snapshotStore.values()).map((entry) => entry.metadata));
-  storeSnapshotMock = vi.fn(async ({ buffer, name, profileId }) => {
+  listSnapshotsMock.mockImplementation(async () =>
+    Array.from(snapshotStore.values()).map((entry) => entry.metadata)
+  );
+  storeSnapshotMock.mockImplementation(async ({ buffer, name, profileId }) => {
     const id = `${Date.now()}`;
     const metadata = { id, name, size: buffer.byteLength, savedAt: Date.now(), profileId };
     snapshotStore.set(id, { metadata, buffer });
     return metadata;
   });
-  loadSnapshotDataMock = vi.fn(async (id: string) => snapshotStore.get(id)?.buffer ?? null);
-  ensureVaultMigratedMock = vi.fn(async () => undefined);
-  getStoredActiveSnapshotIdMock = vi.fn(() => null);
-  storeActiveSnapshotIdMock = vi.fn(() => undefined);
+  loadSnapshotDataMock.mockImplementation(async (id: string) => snapshotStore.get(id)?.buffer ?? null);
+  ensureVaultMigratedMock.mockResolvedValue(undefined);
+  getStoredActiveSnapshotIdMock.mockReturnValue(null);
+  storeActiveSnapshotIdMock.mockReturnValue(undefined);
 
   return {
     ensureVaultMigrated: ensureVaultMigratedMock,
@@ -39,9 +56,31 @@ vi.mock('../services/snapshotVault', async () => {
   };
 });
 
-vi.mock('../components/Emulator', () => ({
-  default: vi.fn().mockImplementation(() => <div data-testid="emulator-snapshot-mock">Mock Emulator</div>)
-}));
+vi.mock('../components/Emulator', () => {
+  const mock = forwardRef((_, ref) => {
+    const instance = useMemo(
+      () => ({
+        runCommand: vi.fn(),
+        runSerialCommand: vi.fn(),
+        runKeyboardCommand: vi.fn(),
+        serial0_send: vi.fn(),
+        keyboardType: vi.fn(),
+        saveState: vi.fn(async () => new ArrayBuffer(4))
+      }),
+      []
+    );
+
+    useImperativeHandle(ref, () => instance, [instance]);
+
+    return <div data-testid="emulator-snapshot-mock">Mock Emulator</div>;
+  });
+  mock.displayName = 'UiSnapshotEmulatorMock';
+
+  return {
+    __esModule: true,
+    default: mock
+  };
+});
 
 describe('UI snapshot states', () => {
   beforeEach(() => {
@@ -49,6 +88,14 @@ describe('UI snapshot states', () => {
     listSnapshotsMock.mockClear();
     storeSnapshotMock.mockClear();
     loadSnapshotDataMock.mockClear();
+    ensureVaultMigratedMock.mockClear();
+    getStoredActiveSnapshotIdMock.mockClear();
+    storeActiveSnapshotIdMock.mockClear();
+    server.resetHandlers();
+    server.use(
+      http.head('/images/dsl_disk.img', () => HttpResponse.text('', { headers: { 'Content-Length': '1024' } })),
+      http.head('/images/dsl-2024.rc7.iso', () => HttpResponse.text('', { headers: { 'Content-Length': '2048' } }))
+    );
   });
 
   it('matches snapshot for empty vault', async () => {
@@ -67,22 +114,21 @@ describe('UI snapshot states', () => {
     const file = new File([new Uint8Array([1, 2])], 'pending.bin', { type: 'application/octet-stream' });
     await userEvent.upload(input, file);
 
-    await screen.findByText(/Importing/i);
+    const importingLabels = await screen.findAllByText(/Importing/i);
+    expect(importingLabels.length).toBeGreaterThan(0);
     expect(asFragment()).toMatchSnapshot('importing');
   });
 
   it('matches snapshot with stored snapshot ready', async () => {
     const buffer = new ArrayBuffer(4);
-    const metadata = { id: 'stored', name: 'stored.bin', size: 4, savedAt: Date.now(), profileId: 'dsl-2024' };
+    const savedAt = Date.UTC(2024, 0, 1, 12, 0, 0);
+    const metadata = { id: 'stored', name: 'stored.bin', size: 4, savedAt, profileId: 'dsl-2024' };
     snapshotStore.set('stored', { metadata, buffer });
+    getStoredActiveSnapshotIdMock.mockReturnValue('stored');
     loadSnapshotDataMock.mockImplementation(async () => buffer);
 
     const { asFragment } = render(<App />);
-    const listItems = await screen.findAllByRole('listitem');
-    const storedItem = listItems.find((item) => within(item).queryByText('stored.bin'));
-    if (!storedItem) {
-      throw new Error('Stored snapshot not rendered');
-    }
+    await screen.findByText('stored.bin');
     expect(asFragment()).toMatchSnapshot('stored-ready');
   });
 });

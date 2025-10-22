@@ -9,7 +9,7 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 }
   },
   webServer: {
-    command: 'npm run preview -- --host 0.0.0.0 --port 4173',
+    command: 'npm run preview',
     port: 4173,
     reuseExistingServer: !process.env.CI
   }

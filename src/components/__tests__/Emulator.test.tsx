@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import Emulator, { EmulatorRef } from '../Emulator';
 
@@ -88,17 +88,21 @@ describe('Emulator component', () => {
       />
     );
 
+    await waitFor(() => expect(window.V86Starter).toHaveBeenCalled());
+
     instance.emit('emulator-ready');
     instance.emit('download-progress', { file_name: 'disk', loaded: 10, total: 20 });
     instance.emit('download-error', { file_name: 'iso', request: { status: 404, statusText: 'Not Found' } });
 
-    expect(onReady).toHaveBeenCalled();
-    expect(onDownloadProgress).toHaveBeenCalledWith({
-      fileName: 'disk',
-      loaded: 10,
-      total: 20,
-      lengthComputable: false
-    });
+    await waitFor(() => expect(onReady).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(onDownloadProgress).toHaveBeenCalledWith({
+        fileName: 'disk',
+        loaded: 10,
+        total: 20,
+        lengthComputable: false
+      })
+    );
     expect(onDownloadError).toHaveBeenCalledWith({ fileName: 'iso', status: 404, statusText: 'Not Found' });
   });
 });

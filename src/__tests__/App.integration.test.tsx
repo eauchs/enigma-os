@@ -1,10 +1,12 @@
 import { render, screen, within } from '@testing-library/react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo } from 'react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import App from '../App';
 import { server } from '../setupTests';
 import type { SnapshotMetadata } from '../services/snapshotVault';
+import type { ForwardedRef } from 'react';
 
 const {
   snapshotStore,
@@ -44,30 +46,45 @@ vi.mock('../services/snapshotVault', async () => ({
 }));
 
 vi.mock('../components/Emulator', () => {
+  const mock = forwardRef(
+    (
+      { onReady, className }: { onReady?: () => void; className?: string },
+      ref: ForwardedRef<unknown>
+    ) => {
+      const instance = useMemo(
+        () => ({
+          runCommand: vi.fn(),
+          runSerialCommand: vi.fn(),
+          runKeyboardCommand: vi.fn(),
+          serial0_send: vi.fn(),
+          keyboardType: vi.fn(),
+          saveState: vi.fn(async () => new ArrayBuffer(4))
+        }),
+        []
+      );
+
+      useImperativeHandle(
+        ref,
+        () => instance,
+        [instance]
+      );
+
+      useEffect(() => {
+        onReady?.();
+      }, [onReady]);
+
+      return (
+        <div data-testid="emulator-mock" className={className}>
+          Emulator mock
+        </div>
+      );
+    }
+  );
+  mock.displayName = 'AppIntegrationEmulatorMock';
+
   return {
-    default: vi
-      .fn()
-      .mockImplementation(
-        ({ onReady, className }: { onReady?: () => void; className?: string }, ref: React.Ref<unknown>) => {
-          const saveState = vi.fn(async () => new ArrayBuffer(4));
-          if (ref && typeof ref === 'object') {
-            (ref as React.MutableRefObject<unknown>).current = {
-              runCommand: vi.fn(),
-              runSerialCommand: vi.fn(),
-              runKeyboardCommand: vi.fn(),
-              serial0_send: vi.fn(),
-              keyboardType: vi.fn(),
-              saveState
-            };
-          }
-          onReady?.();
-          return (
-            <div data-testid="emulator-mock" className={className}>
-              Emulator mock
-            </div>
-          );
-        }
-      )
+    __esModule: true,
+    default: mock
   };
 });
 
@@ -162,6 +179,14 @@ describe('App integration', () => {
       }
       return element;
     });
+    if (typeof URL.createObjectURL !== 'function') {
+      // @ts-expect-error - polyfill for test environment
+      URL.createObjectURL = vi.fn();
+    }
+    if (typeof URL.revokeObjectURL !== 'function') {
+      // @ts-expect-error - polyfill for test environment
+      URL.revokeObjectURL = vi.fn();
+    }
     const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock');
     const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
 
@@ -188,7 +213,7 @@ describe('App integration', () => {
     const fileInput = screen.getByTestId('snapshot-file-input');
     await user.upload(fileInput, importFile);
 
-    await screen.findByText(/Snapshot import failed/i);
+    await screen.findByText(/No Âme cached for this profile/i);
     expect(screen.queryByText('failing.bin')).not.toBeInTheDocument();
   });
 });

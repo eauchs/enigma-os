@@ -1,0 +1,1527 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`UI snapshot states > matches snapshot during import in progress > importing 1`] = `
+<DocumentFragment>
+  <div
+    class="app-shell"
+  >
+    <div
+      class="app"
+    >
+      <header
+        class="app__header"
+      >
+        <div>
+          <h1>
+            Enigma Shell
+          </h1>
+          <p
+            class="app__subtitle"
+          >
+            Ultra-light desktop ready for sovereign agents.
+          </p>
+        </div>
+        <div
+          class="status-pill status-pill--\${statusPillState}"
+        >
+          <span
+            class="status-pill__label"
+          >
+            Importing Âme
+          </span>
+          <span
+            class="status-pill__summary"
+          >
+            Importing snapshot into the local vault…
+          </span>
+        </div>
+      </header>
+      <div
+        class="app__body"
+      >
+        <main
+          class="app__main"
+        >
+          <div
+            class="emulator-frame"
+          >
+            <div
+              class="emulator-frame__header"
+            >
+              <div>
+                <h2>
+                  Damn Small Linux 2024
+                </h2>
+                <p>
+                  Importing Âme…
+                </p>
+              </div>
+              <div
+                class="profile-selector"
+              >
+                <label
+                  for="profile-select"
+                >
+                  Profile
+                </label>
+                <select
+                  id="profile-select"
+                >
+                  <option
+                    value="dsl-2024"
+                  >
+                    Damn Small Linux 2024
+                  </option>
+                </select>
+              </div>
+            </div>
+            <div
+              data-testid="emulator-snapshot-mock"
+            >
+              Mock Emulator
+            </div>
+          </div>
+        </main>
+        <aside
+          class="app__sidebar"
+        >
+          <div
+            class="info-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Current state
+              </h2>
+            </div>
+            <p
+              class="info-card__status"
+            >
+              Importing Âme…
+            </p>
+            <div
+              class="status-grid"
+            >
+              <div>
+                <span
+                  class="meta-label"
+                >
+                  Current phase
+                </span>
+                <span
+                  class="meta-value"
+                >
+                  Booting DSL live ISO
+                </span>
+              </div>
+              <div>
+                <span
+                  class="meta-label"
+                >
+                  Snapshot source
+                </span>
+                <span
+                  class="meta-value"
+                >
+                  —
+                </span>
+              </div>
+            </div>
+          </div>
+          <div
+            class="info-card profile-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Profile overview
+              </h2>
+            </div>
+            <p>
+              A nimble Debian-based environment ideal for rapid boot and minimal resource usage. Perfect for running LM Studio or lightweight agent tooling inside the VM.
+            </p>
+            <p
+              class="profile-card__hint"
+            >
+              Capture a fresh Âme once the VM looks exactly the way you want the sovereign agent to wake up next time.
+            </p>
+          </div>
+          <div
+            class="info-card snapshot-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Âme vault
+              </h2>
+              <span
+                class="badge badge--waiting"
+              >
+                Importing
+              </span>
+            </div>
+            <div
+              class="snapshot-vault"
+            >
+              <p
+                class="snapshot-vault__empty"
+              >
+                No Âme stored yet. Import or capture one to enable instant resumes.
+              </p>
+            </div>
+            <div
+              class="snapshot-actions"
+            >
+              <button
+                class="control-button"
+                disabled=""
+                type="button"
+              >
+                Import Âme
+              </button>
+              <button
+                class="control-button"
+                disabled=""
+                type="button"
+              >
+                Capture from VM
+              </button>
+            </div>
+            <input
+              accept=".bin,application/octet-stream"
+              data-testid="snapshot-file-input"
+              hidden=""
+              type="file"
+            />
+          </div>
+          <div
+            class="info-card asset-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Profile assets
+              </h2>
+            </div>
+            <ul
+              class="asset-manifest"
+            >
+              <li
+                class="asset-manifest__item asset-manifest__item--available"
+              >
+                <div>
+                  <span
+                    class="asset-manifest__name"
+                  >
+                    DSL disk image
+                  </span>
+                  <p
+                    class="asset-manifest__description"
+                  >
+                    Writable disk containing your agent software and persistent files.
+                  </p>
+                </div>
+                <div
+                  class="asset-manifest__status"
+                >
+                  <span>
+                    Available
+                  </span>
+                  <span>
+                    1.00 KB
+                  </span>
+                </div>
+              </li>
+              <li
+                class="asset-manifest__item asset-manifest__item--available"
+              >
+                <div>
+                  <span
+                    class="asset-manifest__name"
+                  >
+                    DSL live ISO
+                  </span>
+                  <p
+                    class="asset-manifest__description"
+                  >
+                    Used for the first boot when no Âme is present.
+                  </p>
+                </div>
+                <div
+                  class="asset-manifest__status"
+                >
+                  <span>
+                    Available
+                  </span>
+                  <span>
+                    2.00 KB
+                  </span>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div
+            class="info-card manual-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Manual boot checklist
+              </h2>
+              <span
+                class="badge badge--warning"
+              >
+                In progress
+              </span>
+            </div>
+            <ol
+              class="manual-steps"
+            >
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  1
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Reach the login prompt
+                  </span>
+                  <p>
+                    Wait for Damn Small Linux to finish booting until the login prompt appears on screen.
+                  </p>
+                </div>
+              </li>
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  2
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Authenticate as root
+                  </span>
+                  <p>
+                    Type the username “root” (no password required) and press Enter to enter the system.
+                  </p>
+                  <code>
+                    root
+                  </code>
+                </div>
+              </li>
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  3
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Launch the desktop
+                  </span>
+                  <p>
+                    Inside the shell, start the graphical environment so you can configure the agent.
+                  </p>
+                  <code>
+                    cd /root && ./startx.sh
+                  </code>
+                </div>
+              </li>
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  4
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Tune your agent
+                  </span>
+                  <p>
+                    Install or configure your VLM stack (LM Studio, Ollama, etc.), then capture a fresh Âme to persist everything.
+                  </p>
+                </div>
+              </li>
+            </ol>
+          </div>
+          <div
+            class="info-card"
+          >
+            <h2>
+              Boot timeline
+            </h2>
+            <ul
+              class="status-timeline"
+            >
+              <li
+                class="status-timeline__item status-timeline__item--active"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Booting DSL live ISO
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Boot DSL live ISO
+                  </p>
+                </div>
+              </li>
+              <li
+                class="status-timeline__item status-timeline__item--pending"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Manual login required
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Log in manually
+                  </p>
+                </div>
+              </li>
+              <li
+                class="status-timeline__item status-timeline__item--pending"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Launch Fluxbox manually
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Start Fluxbox manually
+                  </p>
+                </div>
+              </li>
+              <li
+                class="status-timeline__item status-timeline__item--pending"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Capture a snapshot
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Capture persistent state
+                  </p>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div
+            class="info-card log-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Serial console
+              </h2>
+            </div>
+            <div
+              aria-live="polite"
+              class="log-card__viewport"
+            >
+              <pre>
+                Waiting for serial output…
+              </pre>
+            </div>
+          </div>
+        </aside>
+      </div>
+      <footer
+        class="app-footer"
+      >
+        <form
+          class="objective-form"
+        >
+          <input
+            disabled=""
+            placeholder="Agent is preparing…"
+            type="text"
+          />
+          <button
+            disabled=""
+            type="submit"
+          >
+            Send
+          </button>
+        </form>
+        <p
+          class="objective-helper"
+        >
+          Hold tight while the Âme vault operation completes.
+        </p>
+      </footer>
+    </div>
+  </div>
+</DocumentFragment>
+`;
+
+exports[`UI snapshot states > matches snapshot for empty vault > empty-vault 1`] = `
+<DocumentFragment>
+  <div
+    class="app-shell"
+  >
+    <div
+      class="app"
+    >
+      <header
+        class="app__header"
+      >
+        <div>
+          <h1>
+            Enigma Shell
+          </h1>
+          <p
+            class="app__subtitle"
+          >
+            Ultra-light desktop ready for sovereign agents.
+          </p>
+        </div>
+        <div
+          class="status-pill status-pill--\${statusPillState}"
+        >
+          <span
+            class="status-pill__label"
+          >
+            Manual boot
+          </span>
+          <span
+            class="status-pill__summary"
+          >
+            Follow the manual boot checklist inside the VM.
+          </span>
+        </div>
+      </header>
+      <div
+        class="app__body"
+      >
+        <main
+          class="app__main"
+        >
+          <div
+            class="emulator-frame"
+          >
+            <div
+              class="emulator-frame__header"
+            >
+              <div>
+                <h2>
+                  Damn Small Linux 2024
+                </h2>
+                <p>
+                  No stored Âme detected for Damn Small Linux 2024. Manual boot is available.
+                </p>
+              </div>
+              <div
+                class="profile-selector"
+              >
+                <label
+                  for="profile-select"
+                >
+                  Profile
+                </label>
+                <select
+                  id="profile-select"
+                >
+                  <option
+                    value="dsl-2024"
+                  >
+                    Damn Small Linux 2024
+                  </option>
+                </select>
+              </div>
+            </div>
+            <div
+              data-testid="emulator-snapshot-mock"
+            >
+              Mock Emulator
+            </div>
+          </div>
+        </main>
+        <aside
+          class="app__sidebar"
+        >
+          <div
+            class="info-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Current state
+              </h2>
+            </div>
+            <p
+              class="info-card__status"
+            >
+              No Âme cached for this profile.
+            </p>
+            <div
+              class="status-grid"
+            >
+              <div>
+                <span
+                  class="meta-label"
+                >
+                  Current phase
+                </span>
+                <span
+                  class="meta-value"
+                >
+                  Booting DSL live ISO
+                </span>
+              </div>
+              <div>
+                <span
+                  class="meta-label"
+                >
+                  Snapshot source
+                </span>
+                <span
+                  class="meta-value"
+                >
+                  —
+                </span>
+              </div>
+            </div>
+          </div>
+          <div
+            class="info-card profile-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Profile overview
+              </h2>
+            </div>
+            <p>
+              A nimble Debian-based environment ideal for rapid boot and minimal resource usage. Perfect for running LM Studio or lightweight agent tooling inside the VM.
+            </p>
+            <p
+              class="profile-card__hint"
+            >
+              Capture a fresh Âme once the VM looks exactly the way you want the sovereign agent to wake up next time.
+            </p>
+          </div>
+          <div
+            class="info-card snapshot-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Âme vault
+              </h2>
+              <span
+                class="badge badge--neutral"
+              >
+                Missing
+              </span>
+            </div>
+            <div
+              class="snapshot-vault"
+            >
+              <p
+                class="snapshot-vault__empty"
+              >
+                No Âme stored yet. Import or capture one to enable instant resumes.
+              </p>
+            </div>
+            <div
+              class="snapshot-actions"
+            >
+              <button
+                class="control-button"
+                type="button"
+              >
+                Import Âme
+              </button>
+              <button
+                class="control-button"
+                type="button"
+              >
+                Capture from VM
+              </button>
+            </div>
+            <input
+              accept=".bin,application/octet-stream"
+              data-testid="snapshot-file-input"
+              hidden=""
+              type="file"
+            />
+          </div>
+          <div
+            class="info-card asset-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Profile assets
+              </h2>
+            </div>
+            <ul
+              class="asset-manifest"
+            >
+              <li
+                class="asset-manifest__item asset-manifest__item--available"
+              >
+                <div>
+                  <span
+                    class="asset-manifest__name"
+                  >
+                    DSL disk image
+                  </span>
+                  <p
+                    class="asset-manifest__description"
+                  >
+                    Writable disk containing your agent software and persistent files.
+                  </p>
+                </div>
+                <div
+                  class="asset-manifest__status"
+                >
+                  <span>
+                    Available
+                  </span>
+                  <span>
+                    1.00 KB
+                  </span>
+                </div>
+              </li>
+              <li
+                class="asset-manifest__item asset-manifest__item--available"
+              >
+                <div>
+                  <span
+                    class="asset-manifest__name"
+                  >
+                    DSL live ISO
+                  </span>
+                  <p
+                    class="asset-manifest__description"
+                  >
+                    Used for the first boot when no Âme is present.
+                  </p>
+                </div>
+                <div
+                  class="asset-manifest__status"
+                >
+                  <span>
+                    Available
+                  </span>
+                  <span>
+                    2.00 KB
+                  </span>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div
+            class="info-card manual-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Manual boot checklist
+              </h2>
+              <span
+                class="badge badge--warning"
+              >
+                In progress
+              </span>
+            </div>
+            <ol
+              class="manual-steps"
+            >
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  1
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Reach the login prompt
+                  </span>
+                  <p>
+                    Wait for Damn Small Linux to finish booting until the login prompt appears on screen.
+                  </p>
+                </div>
+              </li>
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  2
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Authenticate as root
+                  </span>
+                  <p>
+                    Type the username “root” (no password required) and press Enter to enter the system.
+                  </p>
+                  <code>
+                    root
+                  </code>
+                </div>
+              </li>
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  3
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Launch the desktop
+                  </span>
+                  <p>
+                    Inside the shell, start the graphical environment so you can configure the agent.
+                  </p>
+                  <code>
+                    cd /root && ./startx.sh
+                  </code>
+                </div>
+              </li>
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  4
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Tune your agent
+                  </span>
+                  <p>
+                    Install or configure your VLM stack (LM Studio, Ollama, etc.), then capture a fresh Âme to persist everything.
+                  </p>
+                </div>
+              </li>
+            </ol>
+          </div>
+          <div
+            class="info-card"
+          >
+            <h2>
+              Boot timeline
+            </h2>
+            <ul
+              class="status-timeline"
+            >
+              <li
+                class="status-timeline__item status-timeline__item--active"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Booting DSL live ISO
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Boot DSL live ISO
+                  </p>
+                </div>
+              </li>
+              <li
+                class="status-timeline__item status-timeline__item--pending"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Manual login required
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Log in manually
+                  </p>
+                </div>
+              </li>
+              <li
+                class="status-timeline__item status-timeline__item--pending"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Launch Fluxbox manually
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Start Fluxbox manually
+                  </p>
+                </div>
+              </li>
+              <li
+                class="status-timeline__item status-timeline__item--pending"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Capture a snapshot
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Capture persistent state
+                  </p>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div
+            class="info-card log-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Serial console
+              </h2>
+            </div>
+            <div
+              aria-live="polite"
+              class="log-card__viewport"
+            >
+              <pre>
+                Waiting for serial output…
+              </pre>
+            </div>
+          </div>
+        </aside>
+      </div>
+      <footer
+        class="app-footer"
+      >
+        <form
+          class="objective-form"
+        >
+          <input
+            disabled=""
+            placeholder="Agent is preparing…"
+            type="text"
+          />
+          <button
+            disabled=""
+            type="submit"
+          >
+            Send
+          </button>
+        </form>
+        <p
+          class="objective-helper"
+        >
+          Boot manually using the checklist, then capture an Âme to automate future resumes.
+        </p>
+      </footer>
+    </div>
+  </div>
+</DocumentFragment>
+`;
+
+exports[`UI snapshot states > matches snapshot with stored snapshot ready > stored-ready 1`] = `
+<DocumentFragment>
+  <div
+    class="app-shell"
+  >
+    <div
+      class="app"
+    >
+      <header
+        class="app__header"
+      >
+        <div>
+          <h1>
+            Enigma Shell
+          </h1>
+          <p
+            class="app__subtitle"
+          >
+            Ultra-light desktop ready for sovereign agents.
+          </p>
+        </div>
+        <div
+          class="status-pill status-pill--\${statusPillState}"
+        >
+          <span
+            class="status-pill__label"
+          >
+            Restoring
+          </span>
+          <span
+            class="status-pill__summary"
+          >
+            Rehydrating the saved Âme and preparing the VM display.
+          </span>
+        </div>
+      </header>
+      <div
+        class="app__body"
+      >
+        <main
+          class="app__main"
+        >
+          <div
+            class="emulator-frame"
+          >
+            <div
+              class="emulator-frame__header"
+            >
+              <div>
+                <h2>
+                  Damn Small Linux 2024
+                </h2>
+                <p>
+                  Stored Âme found. Booting automatically…
+                </p>
+              </div>
+              <div
+                class="profile-selector"
+              >
+                <label
+                  for="profile-select"
+                >
+                  Profile
+                </label>
+                <select
+                  id="profile-select"
+                >
+                  <option
+                    value="dsl-2024"
+                  >
+                    Damn Small Linux 2024
+                  </option>
+                </select>
+              </div>
+            </div>
+            <div
+              data-testid="emulator-snapshot-mock"
+            >
+              Mock Emulator
+            </div>
+          </div>
+        </main>
+        <aside
+          class="app__sidebar"
+        >
+          <div
+            class="info-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Current state
+              </h2>
+            </div>
+            <p
+              class="info-card__status"
+            >
+              stored.bin · 4 B
+            </p>
+            <div
+              class="status-grid"
+            >
+              <div>
+                <span
+                  class="meta-label"
+                >
+                  Current phase
+                </span>
+                <span
+                  class="meta-value"
+                >
+                  Restoring agent state
+                </span>
+              </div>
+              <div>
+                <span
+                  class="meta-label"
+                >
+                  Snapshot source
+                </span>
+                <span
+                  class="meta-value"
+                >
+                  Restored from vault
+                </span>
+              </div>
+            </div>
+          </div>
+          <div
+            class="info-card profile-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Profile overview
+              </h2>
+            </div>
+            <p>
+              A nimble Debian-based environment ideal for rapid boot and minimal resource usage. Perfect for running LM Studio or lightweight agent tooling inside the VM.
+            </p>
+            <p
+              class="profile-card__hint"
+            >
+              Capture a fresh Âme once the VM looks exactly the way you want the sovereign agent to wake up next time.
+            </p>
+          </div>
+          <div
+            class="info-card snapshot-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Âme vault
+              </h2>
+              <span
+                class="badge badge--success"
+              >
+                Ready
+              </span>
+            </div>
+            <div
+              class="snapshot-vault"
+            >
+              <ul>
+                <li
+                  class="snapshot-vault__item snapshot-vault__item--active"
+                >
+                  <div
+                    class="snapshot-vault__main"
+                  >
+                    <button
+                      type="button"
+                    >
+                      <span
+                        class="snapshot-vault__name"
+                      >
+                        stored.bin
+                      </span>
+                      <span
+                        class="snapshot-vault__meta"
+                      >
+                        4 B · Jan 1, 2024, 12:00 PM
+                      </span>
+                    </button>
+                  </div>
+                  <div
+                    class="snapshot-vault__actions"
+                  >
+                    <button
+                      type="button"
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                    >
+                      Export
+                    </button>
+                    <button
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+            <div
+              class="snapshot-actions"
+            >
+              <button
+                class="control-button"
+                type="button"
+              >
+                Import Âme
+              </button>
+              <button
+                class="control-button"
+                type="button"
+              >
+                Capture from VM
+              </button>
+            </div>
+            <input
+              accept=".bin,application/octet-stream"
+              data-testid="snapshot-file-input"
+              hidden=""
+              type="file"
+            />
+          </div>
+          <div
+            class="info-card asset-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Profile assets
+              </h2>
+            </div>
+            <ul
+              class="asset-manifest"
+            >
+              <li
+                class="asset-manifest__item asset-manifest__item--available"
+              >
+                <div>
+                  <span
+                    class="asset-manifest__name"
+                  >
+                    DSL disk image
+                  </span>
+                  <p
+                    class="asset-manifest__description"
+                  >
+                    Writable disk containing your agent software and persistent files.
+                  </p>
+                </div>
+                <div
+                  class="asset-manifest__status"
+                >
+                  <span>
+                    Available
+                  </span>
+                  <span>
+                    1.00 KB
+                  </span>
+                </div>
+              </li>
+              <li
+                class="asset-manifest__item asset-manifest__item--available"
+              >
+                <div>
+                  <span
+                    class="asset-manifest__name"
+                  >
+                    DSL live ISO
+                  </span>
+                  <p
+                    class="asset-manifest__description"
+                  >
+                    Used for the first boot when no Âme is present.
+                  </p>
+                </div>
+                <div
+                  class="asset-manifest__status"
+                >
+                  <span>
+                    Available
+                  </span>
+                  <span>
+                    2.00 KB
+                  </span>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div
+            class="info-card manual-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Manual boot checklist
+              </h2>
+            </div>
+            <ol
+              class="manual-steps"
+            >
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  1
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Reach the login prompt
+                  </span>
+                  <p>
+                    Wait for Damn Small Linux to finish booting until the login prompt appears on screen.
+                  </p>
+                </div>
+              </li>
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  2
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Authenticate as root
+                  </span>
+                  <p>
+                    Type the username “root” (no password required) and press Enter to enter the system.
+                  </p>
+                  <code>
+                    root
+                  </code>
+                </div>
+              </li>
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  3
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Launch the desktop
+                  </span>
+                  <p>
+                    Inside the shell, start the graphical environment so you can configure the agent.
+                  </p>
+                  <code>
+                    cd /root && ./startx.sh
+                  </code>
+                </div>
+              </li>
+              <li>
+                <span
+                  class="manual-steps__index"
+                >
+                  4
+                </span>
+                <div>
+                  <span
+                    class="manual-steps__title"
+                  >
+                    Tune your agent
+                  </span>
+                  <p>
+                    Install or configure your VLM stack (LM Studio, Ollama, etc.), then capture a fresh Âme to persist everything.
+                  </p>
+                </div>
+              </li>
+            </ol>
+          </div>
+          <div
+            class="info-card"
+          >
+            <h2>
+              Boot timeline
+            </h2>
+            <ul
+              class="status-timeline"
+            >
+              <li
+                class="status-timeline__item status-timeline__item--active"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Restoring agent state
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Load saved memory snapshot
+                  </p>
+                </div>
+              </li>
+              <li
+                class="status-timeline__item status-timeline__item--pending"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Watching for login prompt
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Detect login prompt
+                  </p>
+                </div>
+              </li>
+              <li
+                class="status-timeline__item status-timeline__item--pending"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Priming Fluxbox desktop
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Open Fluxbox desktop
+                  </p>
+                </div>
+              </li>
+              <li
+                class="status-timeline__item status-timeline__item--pending"
+              >
+                <span
+                  aria-hidden="true"
+                  class="status-timeline__icon"
+                />
+                <div>
+                  <div
+                    class="status-timeline__title"
+                  >
+                    Launching agent GUI
+                  </div>
+                  <p
+                    class="status-timeline__description"
+                  >
+                    Start graphical agent
+                  </p>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div
+            class="info-card log-card"
+          >
+            <div
+              class="info-card__header"
+            >
+              <h2>
+                Serial console
+              </h2>
+            </div>
+            <div
+              aria-live="polite"
+              class="log-card__viewport"
+            >
+              <pre>
+                Waiting for serial output…
+              </pre>
+            </div>
+          </div>
+        </aside>
+      </div>
+      <footer
+        class="app-footer"
+      >
+        <form
+          class="objective-form"
+        >
+          <input
+            disabled=""
+            placeholder="Agent is preparing…"
+            type="text"
+          />
+          <button
+            disabled=""
+            type="submit"
+          >
+            Send
+          </button>
+        </form>
+        <p
+          class="objective-helper"
+        >
+          Rehydrating the saved Âme and preparing the VM display.
+        </p>
+      </footer>
+    </div>
+  </div>
+</DocumentFragment>
+`;

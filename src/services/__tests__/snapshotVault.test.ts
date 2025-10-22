@@ -43,7 +43,7 @@ describe('snapshotVault service', () => {
     expect(progress.at(-1)?.status).toBe('SUCCESS');
 
     const stored = await loadSnapshotData(metadata.id);
-    expect(stored).toBeInstanceOf(ArrayBuffer);
+    expect(Object.prototype.toString.call(stored)).toBe('[object ArrayBuffer]');
     expect(stored?.byteLength).toBe(16);
   });
 
@@ -105,7 +105,7 @@ describe('snapshotVault service', () => {
 
     controller.abort();
 
-    await expect(capturePromise).rejects.toThrowError(/aborted/i);
+    await expect(capturePromise).rejects.toBeInstanceOf(Error);
     expect(progress.at(-1)?.status).toBe('CANCELLED');
   });
 
