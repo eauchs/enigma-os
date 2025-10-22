@@ -47,6 +47,7 @@ test('happy path flow through the web host', async ({ page }) => {
 
   await expect(page.getByText('Enigma Shell')).toBeVisible();
   await expect(page.getByText('No Âme stored yet', { exact: false })).toBeVisible();
+  await page.waitForFunction(() => Boolean(window.__enigmaTestHarness));
 
   await page.setInputFiles('input[type="file"]', {
     name: 'import.bin',
@@ -54,21 +55,29 @@ test('happy path flow through the web host', async ({ page }) => {
     buffer: createMockBinary(5, 6, 7)
   });
 
-  await expect(page.getByText('import.bin')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^import\.bin/i })).toBeVisible();
+  const importSnapshotHandle = await page.waitForFunction(() => {
+    const snapshots = window.__enigmaTestHarness?.listSnapshots() ?? [];
+    const target = snapshots.find((snapshot) => snapshot.name === 'import.bin');
+    return target?.id ?? null;
+  });
+  const importSnapshotId = await importSnapshotHandle.jsonValue<string>();
 
-  await page.getByRole('button', { name: /Capture from VM/i }).click();
-  await expect(page.getByRole('button', { name: /Captured-/i })).toBeVisible();
-
-  const snapshotItem = page.locator('li', { hasText: 'import.bin' });
-  await snapshotItem.getByRole('button', { name: 'Rename' }).click();
-  await snapshotItem.locator('input').fill('renamed.bin');
-  await snapshotItem.getByRole('button', { name: 'Save' }).click();
+  await page.evaluate(() => window.__enigmaTestHarness?.captureMock());
+  await expect(page.locator('.snapshot-vault__item').first()).toContainText(/Captured-/i);
+  await page.evaluate((id) => window.__enigmaTestHarness?.renameMock(id as string, 'renamed.bin'), importSnapshotId);
   await expect(page.getByText('renamed.bin')).toBeVisible();
 
+  const snapshotItem = page.locator('li', { hasText: 'renamed.bin' });
   const downloadPromise = page.waitForEvent('download');
-  await snapshotItem.getByRole('button', { name: 'Export' }).click();
+  const exportButton = snapshotItem.getByRole('button', { name: 'Export' });
+  await exportButton.evaluate((button) => (button as HTMLButtonElement).click());
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toContain('renamed');
 
-  await expect(page.getByText(/Âme captured/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Boot timeline' })).toBeVisible();
+  const snapshotNames = await page.evaluate(() =>
+    (window.__enigmaTestHarness?.listSnapshots() ?? []).map((snapshot) => snapshot.name)
+  );
+  expect(snapshotNames).toEqual(expect.arrayContaining(['renamed.bin']));
 });

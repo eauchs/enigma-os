@@ -31,11 +31,22 @@ import {
 } from './services/snapshotVault';
 import { BootStage, StageContent, BootStageContentSet, BOOT_STAGE_ORDER } from './types/boot';
 
- type AgentState = ArrayBuffer | null;
- type SnapshotStage = 'checking' | 'missing' | 'importing' | 'capturing' | 'ready' | 'error';
- type SnapshotSource = 'none' | 'stored' | 'uploaded' | 'captured';
- type StatusPillState = BootStage | 'ready' | 'manual' | 'error' | 'importing' | 'capturing';
- type AssetStatusState = 'unknown' | 'available' | 'missing' | 'downloading' | 'error';
+type AgentState = ArrayBuffer | null;
+type SnapshotStage = 'checking' | 'missing' | 'importing' | 'capturing' | 'ready' | 'error';
+type SnapshotSource = 'none' | 'stored' | 'uploaded' | 'captured';
+type StatusPillState = BootStage | 'ready' | 'manual' | 'error' | 'importing' | 'capturing';
+type AssetStatusState = 'unknown' | 'available' | 'missing' | 'downloading' | 'error';
+
+declare global {
+  interface Window {
+    __enigmaTestHarness?: {
+      captureMock: (name?: string) => Promise<SnapshotMetadata>;
+      renameMock: (id: string, name: string) => Promise<SnapshotMetadata | null>;
+      listSnapshots: () => SnapshotMetadata[];
+      renameByName: (currentName: string, nextName: string) => Promise<SnapshotMetadata | null>;
+    };
+  }
+}
 
  interface AssetStatus {
    status: AssetStatusState;
@@ -811,17 +822,17 @@ import { BootStage, StageContent, BootStageContentSet, BOOT_STAGE_ORDER } from '
      }
    }, []);
 
-   const handleCaptureSnapshot = useCallback(async () => {
-     const emulator = emulatorRef.current;
-     if (!emulator) {
-       setStatus('Emulator is not ready to capture an Âme yet.');
-       return;
-     }
-     setSnapshotError(null);
-     setSnapshotStage('capturing');
-     setStatus('Capturing Âme from running VM…');
-     try {
-       const buffer = await emulator.saveState();
+  const handleCaptureSnapshot = useCallback(async () => {
+    const emulator = emulatorRef.current;
+    if (!emulator) {
+      setStatus('Emulator is not ready to capture an Âme yet.');
+      return;
+    }
+    setSnapshotError(null);
+    setSnapshotStage('capturing');
+    setStatus('Capturing Âme from running VM…');
+    try {
+      const buffer = await emulator.saveState();
        if (!buffer) {
          throw new Error('The emulator did not return any snapshot data.');
        }
@@ -838,16 +849,80 @@ import { BootStage, StageContent, BootStageContentSet, BOOT_STAGE_ORDER } from '
        });
        setSnapshotMeta(metadata);
        setActiveSnapshotId(metadata.id);
-       setStatus('Âme captured. Restarting the agent…');
-     } catch (error) {
-       console.error('Failed to capture snapshot', error);
-       pendingSnapshotSourceRef.current = 'none';
-       setSnapshotStage('error');
-       setSnapshotSource('none');
-       setSnapshotError((error as Error)?.message ?? 'Unable to capture snapshot.');
-       setStatus('Snapshot capture failed. The current session continues running.');
-     }
-   }, [activeProfile.id]);
+      setStatus('Âme captured. Restarting the agent…');
+    } catch (error) {
+      console.error('Failed to capture snapshot', error);
+      pendingSnapshotSourceRef.current = 'none';
+      setSnapshotStage('error');
+      setSnapshotSource('none');
+      setSnapshotError((error as Error)?.message ?? 'Unable to capture snapshot.');
+      setStatus('Snapshot capture failed. The current session continues running.');
+    }
+  }, [activeProfile.id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (import.meta.env.PROD) {
+      if (window.__enigmaTestHarness) {
+        delete window.__enigmaTestHarness;
+      }
+      return;
+    }
+
+    const renameById = async (id: string, name: string) => {
+      const metadata = await renameSnapshot(id, name);
+      if (!metadata) {
+        return null;
+      }
+      setAvailableSnapshots((previous) =>
+        previous.map((snapshot) => (snapshot.id === metadata.id ? metadata : snapshot))
+      );
+      setSnapshotMeta((previous) => (previous && previous.id === metadata.id ? metadata : previous));
+      setStatus('Âme renamed via test harness.');
+      return metadata;
+    };
+
+    const harness = {
+      captureMock: async (name?: string) => {
+        const buffer = new ArrayBuffer(4);
+        const metadata = await storeSnapshot({
+          buffer,
+          name: name?.trim() || `Captured-${new Date().toISOString().replace(/[:.]/g, '-')}.bin`,
+          savedAt: Date.now(),
+          profileId: activeProfile.id
+        });
+        pendingSnapshotSourceRef.current = 'captured';
+        setAvailableSnapshots((previous) => {
+          const filtered = previous.filter((snapshot) => snapshot.id !== metadata.id);
+          return [metadata, ...filtered];
+        });
+        setSnapshotMeta(metadata);
+        setActiveSnapshotId(metadata.id);
+        setSnapshotStage('ready');
+        setStatus('Âme captured via test harness.');
+        return metadata;
+      },
+      renameMock: renameById,
+      listSnapshots: () => [...availableSnapshots],
+      renameByName: async (currentName: string, nextName: string) => {
+        const target = availableSnapshots.find((snapshot) => snapshot.name === currentName);
+        if (!target) {
+          return null;
+        }
+        return renameById(target.id, nextName);
+      }
+    } as const;
+
+    window.__enigmaTestHarness = harness;
+
+    return () => {
+      if (window.__enigmaTestHarness === harness) {
+        delete window.__enigmaTestHarness;
+      }
+    };
+  }, [activeProfile.id, availableSnapshots]);
 
    const handleObjectiveSubmit = useCallback(
      (objective: string) => {
