@@ -61,6 +61,12 @@ npm run lint
 npm run e2e
 ```
 
+Avant votre toute première exécution E2E, installez le navigateur et ses dépendances système :
+
+```bash
+npx playwright install --with-deps chromium
+```
+
 Vitest initialise automatiquement MSW (`src/setupTests.ts`) et polyfill IndexedDB via `fake-indexeddb`, ce qui permet de rejouer toutes les interactions du coffre d’Âmes sans navigateur réel.
 
 ## Utiliser le coffre d’Âmes
