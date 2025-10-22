@@ -1,84 +1,69 @@
 # Enigma Shell 🔮
 
-## Projet : L'Agent Souverain Nomade
+## Agent souverain, expérience raffinée
+Enigma Shell donne vie à l'« Agent Souverain Nomade » : une IA persistante encapsulée dans sa propre machine virtuelle v86. La nouvelle interface web orchestre l'intégralité du cycle de boot et de sauvegarde pour offrir une expérience premium dès l'ouverture :
 
-### 1. Concept Central
+- **Profils d'OS dynamiques** – sélectionne la distribution à charger (par défaut Damn Small Linux 2024) et expose le manifeste d'assets attendu pour préparer rapidement d'autres systèmes.
+- **Coffre d'Âmes avancé** – import, capture, renommage, export et suppression de plusieurs snapshots stockés dans IndexedDB, avec sélection rapide et tri automatique par profil.
+- **Capture instantanée** – un clic « Capture from VM » déclenche `save_state()` côté hôte, sauvegarde l'Âme et relance la VM sur le nouvel état.
+- **Indicateurs de boot riches** – timeline interactive, journal série en direct et statut de téléchargement des assets v86 pour diagnostiquer immédiatement tout blocage.
+- **Guidage manuel clair** – checklist pas-à-pas, rappels des commandes (`root`, `cd /root && ./startx.sh`) et badges d’état pour réussir le premier boot sans snapshot.
 
-L'Agent Souverain Nomade est une **entité IA personnelle et persistante**, dotée de son propre ordinateur virtuel graphique. Il est conçu pour être une extension numérique de son utilisateur, capable d'exécuter des tâches autonomes 24/7. Sa conception garantit une **souveraineté totale des données** et une **indépendance matérielle**, permettant à l'agent de "déménager" d'un ordinateur à un autre sans jamais perdre sa mémoire ou son contexte.
+L’objectif reste de livrer un agent autonome capable d’exécuter une boucle perception‑action pilotée par un VLM (LM Studio/Ollama) directement dans la VM, tout en garantissant la souveraineté des données.
 
-### 2. La Vision
+## Architecture (rappel)
+1. **Hôte — corps** : application React/Vite (future application Electron) qui exécute v86 et orchestre les entrées.
+2. **Âme — état** : snapshots binaires `save_state()` qui capturent mémoire + disque.
+3. **Coffre-fort — persistance** : aujourd’hui IndexedDB, demain stockage distant (S3/R2, Mega, solution blockchain) signé avec l’identité de l’utilisateur.
+4. **Télécommande — interface** : l’UI web expose statut, console et formulaire d’objectifs (future PWA/WebRTC).
+5. **Clé — identité** : intégration MetaMask prévue pour signer les accès et lier chaque Âme à une identité souveraine.
 
-À l'ère des IA centralisées (ChatGPT, Gemini, etc.), ce projet propose une rupture radicale : redonner le contrôle total à l'utilisateur. La vision est de créer un **agent IA qui vous appartient vraiment**, non pas en tant que service, mais en tant que "bien" numérique.
+## Installation & lancement
+1. **Cloner & installer**
+   ```bash
+   git clone <repo>
+   cd enigma-os
+   npm install
+   ```
+2. **Fournir les assets v86** (non versionnés pour des raisons de taille) :
+   - `public/images/dsl_disk.img`
+   - `public/images/dsl-2024.rc7.iso`
 
-*   **Souveraineté :** Vos données, vos prompts et les opérations de votre agent ne quittent jamais votre sphère de contrôle.
-*   **Persistance :** L'agent n'est pas une session qui se termine. Il vit, apprend et évolue en continu.
-*   **Portabilité :** L'agent n'est pas prisonnier d'une machine. Son existence est contenue dans un fichier, lui permettant d'être réveillé sur n'importe quel ordinateur autorisé.
+   Ces chemins sont configurables dans `src/config/agentProfiles.ts` si vous préparez une autre distribution.
+3. **Démarrer en développement**
+   ```bash
+   npm run dev
+   ```
+   Ouvrez `http://localhost:5173` pour accéder à l’hôte.
+4. **Build de production**
+   ```bash
+   npm run build
+   ```
 
-### 3. Les Piliers de l'Architecture
+## Utiliser le coffre d’Âmes
+- **Import** : bouton « Import Âme » (snapshots `.bin` non compressés) → stockage dans IndexedDB → relance automatique.
+- **Capture** : une fois votre VM configurée, cliquez sur « Capture from VM » pour figer l’état courant. Un nouveau snapshot daté est ajouté au coffre et utilisé immédiatement.
+- **Renommer / Exporter / Supprimer** : actions disponibles pour chaque entrée. Les snapshots sont triés du plus récent au plus ancien et associés au profil ayant servi à la capture.
+- **Sélection multi-profils** : si vous changez d’OS, seules les Âmes compatibles sont proposées en priorité, tout en gardant accès aux autres pour des tests ponctuels.
 
-Le système est distribué et repose sur cinq piliers conceptuels :
+Tous les snapshots restent locaux tant qu’une intégration avec un stockage distant n’est pas configurée. Cela prépare l’étape « Coffre-fort distribué » du projet (upload chiffré + signature MetaMask).
 
-**a) L'Hôte (Le Corps)**
-*   **Technologie :** Une application de bureau **Electron**.
-*   **Rôle :** C'est l'environnement d'exécution qui donne vie à l'agent. Il fait tourner la VM **v86** et se connecte à **Ollama**.
+## Adapter l’OS chargé
+Le fichier [`src/config/agentProfiles.ts`](src/config/agentProfiles.ts) décrit les profils disponibles :
+- chemins des disques (HDA/CDROM), taille mémoire, boot order,
+- prompts à détecter sur la console série, commandes automatiques (login, lancement du GUI),
+- libellés UI (timeline, checklist, manifeste d’assets).
 
-**b) L'Âme (L'État de Sauvegarde)**
-*   **Technologie :** Un fichier binaire (`session.bin`) généré par `emulator.save_state()`.
-*   **Rôle :** C'est l'essence numérique de l'agent, contenant sa mémoire et son état. C'est l'agent lui-même, rendu portable.
+Pour ajouter une nouvelle distribution :
+1. Dupliquer le profil `dsl-2024` en lui attribuant un `id` unique.
+2. Ajuster les URLs d’assets (`/images/…`), la mémoire, les commandes (`loginPrompts`, `guiCommand`, etc.).
+3. Placer les fichiers correspondants dans `public/images/` (ou servez-les depuis un CDN interne).
+4. Redémarrez l’application et sélectionnez le nouveau profil dans le sélecteur.
 
-**c) Le Coffre-Fort (La Mémoire Externe)**
-*   **Technologie :** Un service de stockage de fichiers (Cloudflare R2, S3, NAS...).
-*   **Rôle :** C'est le lieu de repos sécurisé pour l'Âme de l'agent, permettant sa migration.
+## Prochaines étapes
+- **Stockage distant** : synchroniser le coffre local avec un fournisseur chiffré (S3/R2, Mega) ou une solution décentralisée, signé via MetaMask.
+- **Boucle VLM** : intégrer LM Studio dans la VM, capturer le framebuffer, générer les actions clavier/souris depuis un modèle visuel et rejouer ces actions via l’API exposée (`runCommand`, `runSerialCommand`, `runKeyboardCommand`).
+- **Electron** : empaqueter l’hôte pour offrir un runtime portable, connecté à la future télécommande PWA.
 
-**d) La Télécommande (L'Interface de Contrôle)**
-*   **Technologie :** Une application web (PWA) utilisant **WebRTC**.
-*   **Rôle :** C'est votre fenêtre sur le monde de l'agent, se connectant en P2P à l'Hôte.
-
-**e) La Clé (L'Identité Souveraine)**
-*   **Technologie :** Une signature de portefeuille crypto (MetaMask, via Ethers.js).
-*   **Rôle :** C'est le système d'authentification unique et sécurisé pour accéder à l'agent.
-
-### 4. Pile Technologique Principale
-
-*   **Hôte :** Electron, Node.js, TypeScript.
-*   **Interface :** React, Vite.
-*   **Machine Virtuelle :** v86, avec un OS léger (ex: Arch Linux, Tiny Core).
-*   **IA Locale :** Ollama (avec un modèle VLM comme LLaVA).
-*   **Réseau P2P :** WebRTC.
-*   **Authentification :** Ethers.js / Viem.
-
-### 5. État Actuel du Projet
-
-Le projet est actuellement au stade de **preuve de concept de l'Hôte**. Il s'agit d'une application web (non encore packagée avec Electron) qui charge et exécute une machine virtuelle graphique **v86** à partir d'un fichier d'état sauvegardé (`arch_state-v3.bin.zst`).
-
-### 6. Installation & Lancement
-
-1.  **Clone the repository:**
-    ```bash
-    cd enigma-shell
-    ```
-2.  **Placez le fichier d'état de la VM :**
-    Assurez-vous que le fichier `arch_state-v3.bin.zst` est présent dans le dossier `public/images/`.
-3.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
-4.  **Run the application:**
-    ```bash
-    npm run dev
-    ```
-5.  Open your browser to the provided address (usually `http://localhost:5173`).
-
-### 7. Prochaines Étapes (Roadmap)
-
-1.  **Intégration d'Electron :** Transformer l'application web en une application de bureau (L'Hôte).
-2.  **Boucle de Contrôle IA :**
-    -   Capturer l'écran de la VM.
-    -   Envoyer l'image et un objectif à un VLM (Ollama/LLaVA).
-    -   Recevoir et exécuter les commandes de souris/clavier.
-3.  **Persistance de l'État :** Implémenter la sauvegarde (`emulator.save_state()`) et la synchronisation avec le Coffre-Fort.
-
-### 8. Licence
-
-Ce projet est distribué sous la licence MIT.
-
+## Licence
+Projet distribué sous licence MIT.
