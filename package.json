@@ -12,13 +12,14 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.913.0",
     "@google/genai": "^1.0.0",
+    "idb-keyval": "^6.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
-    "@types/node": "20.14.10",
+    "@types/node": "^22.13.1",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.7.0",
