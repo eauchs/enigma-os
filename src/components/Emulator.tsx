@@ -10,10 +10,28 @@ export interface EmulatorRef {
   saveState: () => Promise<ArrayBuffer | null>;
 }
 
-interface EmulatorProps {
+export interface EmulatorDownloadEvent {
+  fileName: string;
+  loaded: number;
+  total?: number;
+  lengthComputable: boolean;
+}
+
+export interface EmulatorDownloadError {
+  fileName: string;
+  status?: number;
+  statusText?: string;
+}
+
+export interface EmulatorProps {
   initialState?: ArrayBuffer | null;
+  bootSeed?: number;
   onReady?: () => void;
   onOutput?: (chunk: string) => void;
+  onDownloadProgress?: (event: EmulatorDownloadEvent) => void;
+  onDownloadError?: (event: EmulatorDownloadError) => void;
+  onError?: (error: Error) => void;
+  className?: string;
 }
 
 // Déclaration globale pour que TypeScript connaisse V86Starter
@@ -25,14 +43,18 @@ declare global {
 }
 
 // On type les props et la ref
-const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady, onOutput }, ref) => {
+const Emulator = forwardRef<EmulatorRef, EmulatorProps>(
+  ({ initialState, bootSeed, onReady, onOutput, onDownloadProgress, onDownloadError, onError, className }, ref) => {
   const screenContainerRef = useRef<HTMLDivElement>(null);
   const emulatorInstance = useRef<any>(null);
   const latestOnReady = useRef(onReady);
   const latestOnOutput = useRef(onOutput);
-  const hasBootstrapped = useRef(false);
+  const latestOnDownloadProgress = useRef(onDownloadProgress);
+  const latestOnDownloadError = useRef(onDownloadError);
+  const latestOnError = useRef(onError);
   const hasAnnouncedReady = useRef(false);
   const lineBufferRef = useRef<string>('');
+  const latestInitialState = useRef<ArrayBuffer | null>(initialState ?? null);
 
   useEffect(() => {
     latestOnReady.current = onReady;
@@ -41,6 +63,22 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady
   useEffect(() => {
     latestOnOutput.current = onOutput;
   }, [onOutput]);
+
+  useEffect(() => {
+    latestOnDownloadProgress.current = onDownloadProgress;
+  }, [onDownloadProgress]);
+
+  useEffect(() => {
+    latestOnDownloadError.current = onDownloadError;
+  }, [onDownloadError]);
+
+  useEffect(() => {
+    latestOnError.current = onError;
+  }, [onError]);
+
+  useEffect(() => {
+    latestInitialState.current = initialState ?? null;
+  }, [bootSeed]);
 
   useEffect(() => {
     let isDisposed = false;
@@ -134,16 +172,27 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady
         hda: { url: "/images/dsl_disk.img", async: false }
       };
 
-      if (initialState) {
+      const state = latestInitialState.current;
+      if (state && state.byteLength > 0) {
         console.log("Restoring agent from saved Âme...");
-        config.initial_state = initialState;
+        config.initial_state = state;
       } else {
         console.log("First boot detected. Booting DSL ISO.");
         config.cdrom = { url: "/images/dsl-2024.rc7.iso", async: false };
         config.boot_order = 0x132;
       }
 
-      const instance = new window.V86Starter(config);
+      let instance: any;
+      try {
+        instance = new window.V86Starter(config);
+      } catch (error) {
+        console.error('Failed to start the v86 emulator.', error);
+        const errorCallback = latestOnError.current;
+        if (errorCallback) {
+          errorCallback(error instanceof Error ? error : new Error(String(error)));
+        }
+        return;
+      }
       emulatorInstance.current = instance;
       hasAnnouncedReady.current = false;
       lineBufferRef.current = '';
@@ -194,6 +243,31 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady
             }
           }
         }
+      });
+
+      instance.add_listener('download-progress', (event: any) => {
+        const progressCb = latestOnDownloadProgress.current;
+        if (!progressCb) {
+          return;
+        }
+        progressCb({
+          fileName: event?.file_name ?? 'resource',
+          loaded: typeof event?.loaded === 'number' ? event.loaded : 0,
+          total: typeof event?.total === 'number' ? event.total : undefined,
+          lengthComputable: Boolean(event?.lengthComputable)
+        });
+      });
+
+      instance.add_listener('download-error', (event: any) => {
+        const errorCb = latestOnDownloadError.current;
+        if (!errorCb) {
+          return;
+        }
+        errorCb({
+          fileName: event?.file_name ?? 'resource',
+          status: event?.request?.status,
+          statusText: event?.request?.statusText
+        });
       });
     };
 
@@ -282,14 +356,16 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(({ initialState, onReady
   }));
 
   // Le conteneur doit déjà contenir un <canvas> et une <div> pour que v86 l'initialise correctement
+  const containerClassName = ['emulator-container', className].filter(Boolean).join(' ');
+
   return (
     <div
       ref={screenContainerRef}
       tabIndex={0}
-      style={{ width: '100%', height: '100%', background: 'black', outline: 'none' }}
+      className={containerClassName}
       onClick={() => screenContainerRef.current?.focus()}
     >
-      <canvas style={{ width: '100%', height: '100%' }} />
+      <canvas />
       <div></div>
     </div>
   );

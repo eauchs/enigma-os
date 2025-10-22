@@ -49,36 +49,53 @@ Le système est distribué et repose sur cinq piliers conceptuels :
 
 ### 5. État Actuel du Projet
 
-Le projet est actuellement au stade de **preuve de concept de l'Hôte**. Il s'agit d'une application web (non encore packagée avec Electron) qui charge et exécute une machine virtuelle graphique **v86** à partir d'un fichier d'état sauvegardé (`arch_state-v3.bin.zst`).
+Le prototype d'hôte évolue désormais comme une **console de pilotage complète** autour de v86. À l'ouverture, l'application :
+
+* vérifie automatiquement la présence d'une Âme dans IndexedDB, relance la VM depuis cette sauvegarde et suit chaque étape du boot ;
+* propose une expérience guidée quand aucun snapshot n'est trouvé (détection des invites, temporisations de secours, timeline d'état, journal série, suivi des téléchargements) ;
+* expose un gestionnaire d'Âme avancé : import local, récupération via URL (coffre externe), capture instantanée via `save_state()`, téléchargement ou purge de la sauvegarde.
+
+Un **playbook d'actions** est livré pour préparer l'intégration VLM : chaque macro décrit une séquence clavier/série/commandes que l'on peut exécuter en un clic ou copier en JSON pour l'agent. Le champ "Objective" reste synchronisé avec l'état de la VM pour éviter tout envoi prématuré.
 
 ### 6. Installation & Lancement
 
-1.  **Clone the repository:**
-    ```bash
-    cd enigma-shell
-    ```
-2.  **Placez le fichier d'état de la VM :**
-    Assurez-vous que le fichier `arch_state-v3.bin.zst` est présent dans le dossier `public/images/`.
-3.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
-4.  **Run the application:**
-    ```bash
-    npm run dev
-    ```
-5.  Open your browser to the provided address (usually `http://localhost:5173`).
+1. **Cloner le dépôt**
+   ```bash
+   git clone https://github.com/<votre-compte>/enigma-os.git
+   cd enigma-os
+   ```
+2. **Préparer les assets v86**
+   * Placez `dsl_disk.img` et `dsl-2024.rc7.iso` dans `public/images/` (les chemins par défaut référencés par l'hôte).
+   * Les assets v86 (`public/v86/*.bin`, `v86.wasm`) sont déjà inclus.
+3. **Installer les dépendances**
+   ```bash
+   npm install
+   ```
+4. **Lancer l'application**
+   ```bash
+   npm run dev
+   ```
+5. Ouvrez le navigateur sur l'URL fournie (généralement `http://localhost:5173`).
 
-### 7. Prochaines Étapes (Roadmap)
+Une fois l'interface chargée, importez une Âme (`.bin`), collez une URL de snapshot distant ou effectuez la première installation manuelle avant de capturer un état persistant.
 
-1.  **Intégration d'Electron :** Transformer l'application web en une application de bureau (L'Hôte).
-2.  **Boucle de Contrôle IA :**
-    -   Capturer l'écran de la VM.
-    -   Envoyer l'image et un objectif à un VLM (Ollama/LLaVA).
-    -   Recevoir et exécuter les commandes de souris/clavier.
-3.  **Persistance de l'État :** Implémenter la sauvegarde (`emulator.save_state()`) et la synchronisation avec le Coffre-Fort.
+### 7. Fonctionnalités actuelles de l'hôte
 
-### 8. Licence
+* **Gestionnaire d'Âme complet** : import local, fetch HTTP(s), capture en direct, téléchargement et suppression avec suivi visuel et métadonnées (nom, taille, date, provenance).
+* **Supervision du boot** : timeline contextuelle, journaux série, états de téléchargement des assets, overlay de progression et garde-fous automatiques (login root, lancement du GUI).
+* **Playbook d'actions pour le VLM** : macros typées (clavier, commandes, délais) exécutables côté hôte ou exportables en JSON pour nourrir la boucle perception→action.
+* **Objectifs orchestrés** : le champ d'objectifs ne s'active qu'une fois le bureau opérationnel afin d'éviter les commandes perdues.
+
+### 8. Prochaines Étapes (Roadmap)
+
+1. **Emballeur Electron** : transformer l'interface web en application native (Hôte) avec distribution multi-plateforme.
+2. **Coffre-fort distant** : brancher un stockage sécurisé (S3/R2/Mega ou couche blockchain) pour synchroniser les captures `save_state()` signées via MetaMask.
+3. **Boucle de contrôle IA** :
+   - capturer le framebuffer de la VM ;
+   - invoquer un VLM local (LM Studio/Ollama) depuis la VM ;
+   - convertir ses décisions en actions (clavier, série, souris) en s'appuyant sur le playbook.
+
+### 9. Licence
 
 Ce projet est distribué sous la licence MIT.
 
