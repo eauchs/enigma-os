@@ -221,12 +221,26 @@ exports[`UI snapshot states > matches snapshot during import in progress > impor
             Serial feed
           </h2>
           <div
-            aria-live="polite"
-            class="console-feed"
+            class="serial-console"
           >
-            <pre>
-              Waiting for serial output…
-            </pre>
+            <div
+              aria-live="polite"
+              class="console-feed"
+            >
+              <pre>
+                Waiting for serial output…
+              </pre>
+            </div>
+            <div
+              class="console-actions"
+            >
+              <button
+                disabled=""
+                type="button"
+              >
+                Copy serial log
+              </button>
+            </div>
           </div>
         </section>
       </main>
@@ -841,12 +855,26 @@ exports[`UI snapshot states > matches snapshot for empty vault > empty-vault 1`]
             Serial feed
           </h2>
           <div
-            aria-live="polite"
-            class="console-feed"
+            class="serial-console"
           >
-            <pre>
-              Waiting for serial output…
-            </pre>
+            <div
+              aria-live="polite"
+              class="console-feed"
+            >
+              <pre>
+                Waiting for serial output…
+              </pre>
+            </div>
+            <div
+              class="console-actions"
+            >
+              <button
+                disabled=""
+                type="button"
+              >
+                Copy serial log
+              </button>
+            </div>
           </div>
         </section>
       </main>
@@ -1460,12 +1488,26 @@ exports[`UI snapshot states > matches snapshot with stored snapshot ready > stor
             Serial feed
           </h2>
           <div
-            aria-live="polite"
-            class="console-feed"
+            class="serial-console"
           >
-            <pre>
-              Waiting for serial output…
-            </pre>
+            <div
+              aria-live="polite"
+              class="console-feed"
+            >
+              <pre>
+                Waiting for serial output…
+              </pre>
+            </div>
+            <div
+              class="console-actions"
+            >
+              <button
+                disabled=""
+                type="button"
+              >
+                Copy serial log
+              </button>
+            </div>
           </div>
         </section>
       </main>
