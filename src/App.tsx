@@ -7,6 +7,7 @@ import Emulator, {
 } from './components/Emulator';
 import ActionPlaybook from './components/ActionPlaybook';
 import StatusRibbon from './components/StatusRibbon';
+import SerialConsole, { SerialCopyResult } from './components/SerialConsole';
 import { ACTION_PLAYBOOKS } from './data/actionPlaybook';
 import {
   agentProfiles,
@@ -141,7 +142,6 @@ const App: React.FC = () => {
   const [downloadedAssets, setDownloadedAssets] = useState<Record<string, ArrayBuffer>>({});
 
   const emulatorRef = useRef<EmulatorRef | null>(null);
-  const logViewportRef = useRef<HTMLDivElement>(null);
   const objectiveInputRef = useRef<HTMLInputElement>(null);
   const snapshotInputRef = useRef<HTMLInputElement>(null);
   const assetFileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
@@ -653,12 +653,24 @@ const App: React.FC = () => {
     setStatus(`Emulator error: ${error.message}`);
   }, []);
 
-  useEffect(() => {
-    const viewport = logViewportRef.current;
-    if (viewport) {
-      viewport.scrollTop = viewport.scrollHeight;
-    }
-  }, [serialOutput]);
+  const handleSerialCopyResult = useCallback(
+    (result: SerialCopyResult) => {
+      if (result.success) {
+        setStatus('Serial log copied to clipboard.');
+        return;
+      }
+      if (result.reason === 'empty') {
+        setStatus('No serial output available to copy yet.');
+        return;
+      }
+      if (result.reason === 'unsupported') {
+        setStatus('Clipboard is not available in this environment.');
+        return;
+      }
+      setStatus(`Unable to copy serial log${result.error ? `: ${result.error}` : '.'}`);
+    },
+    []
+  );
 
   useEffect(() => {
     if (!usingSavedState) {
@@ -1208,8 +1220,6 @@ const App: React.FC = () => {
   const firstPlaybook = ACTION_PLAYBOOKS[0] ?? null;
   const canImportSnapshot = snapshotStage !== 'importing' && snapshotStage !== 'capturing';
   const canCaptureSnapshot = snapshotStage !== 'capturing';
-  const consoleText = serialOutput.trim().length ? serialOutput : 'Waiting for serial output…';
-
   const quickPlaybookLabel = useMemo(() => {
     if (!firstPlaybook) {
       return '';
@@ -1305,9 +1315,11 @@ const App: React.FC = () => {
           </section>
           <section className="stage__console">
             <h2>Serial feed</h2>
-            <div className="console-feed" ref={logViewportRef} aria-live="polite">
-              <pre>{consoleText}</pre>
-            </div>
+            <SerialConsole
+              log={serialOutput}
+              placeholder="Waiting for serial output…"
+              onCopyResult={handleSerialCopyResult}
+            />
           </section>
         </main>
 

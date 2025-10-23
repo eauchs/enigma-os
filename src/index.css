@@ -258,6 +258,36 @@ input {
   word-break: break-word;
 }
 
+.serial-console {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.console-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.console-actions__feedback {
+  font-size: 0.75rem;
+  color: var(--color-text-soft);
+  margin-right: auto;
+}
+
+.console-actions__feedback--success {
+  color: rgba(38, 255, 230, 0.8);
+}
+
+.console-actions__feedback--error {
+  color: var(--color-rose);
+}
+
+.console-actions__feedback--info {
+  color: var(--color-text-muted);
+}
+
 .console-feed::-webkit-scrollbar {
   width: 8px;
 }
