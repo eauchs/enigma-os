@@ -1,6 +1,11 @@
 import React, { forwardRef, useImperativeHandle, useRef, useEffect, useMemo } from 'react';
 
 // On définit les types pour que TypeScript comprenne ce que notre composant peut faire
+export interface CaptureScreenshotOptions {
+  format?: 'image/png' | 'image/jpeg';
+  quality?: number;
+}
+
 export interface EmulatorRef {
   serial0_send: (cmd: string) => void;
   keyboardType: (text: string) => void;
@@ -8,6 +13,7 @@ export interface EmulatorRef {
   runSerialCommand: (command: string) => void;
   runKeyboardCommand: (command: string) => void;
   saveState: () => Promise<ArrayBuffer | null>;
+  captureScreenshot: (options?: CaptureScreenshotOptions) => Promise<string | null>;
 }
 
 export interface EmulatorBootDisk {
@@ -433,6 +439,43 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(
         // Appelle la fonction de sauvegarde de v86
         return await emulatorInstance.current.save_state();
       }
+      return null;
+    },
+    captureScreenshot: async (options?: CaptureScreenshotOptions) => {
+      const container = screenContainerRef.current;
+      if (!container) {
+        return null;
+      }
+
+      const canvas = container.querySelector('canvas');
+      if (!(canvas instanceof HTMLCanvasElement)) {
+        return null;
+      }
+
+      const format = options?.format ?? 'image/png';
+      const quality = options?.quality;
+
+      try {
+        if (typeof canvas.toDataURL === 'function') {
+          return canvas.toDataURL(format, quality);
+        }
+
+        if (typeof canvas.toBlob === 'function') {
+          const blob = await new Promise<Blob | null>((resolve) => {
+            canvas.toBlob((value) => resolve(value), format, quality);
+          });
+          if (!blob) {
+            return null;
+          }
+          const arrayBuffer = await blob.arrayBuffer();
+          const base64 = window.btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+          return `data:${blob.type};base64,${base64}`;
+        }
+      } catch (error) {
+        console.warn('Failed to capture emulator screenshot', error);
+        return null;
+      }
+
       return null;
     }
   }));

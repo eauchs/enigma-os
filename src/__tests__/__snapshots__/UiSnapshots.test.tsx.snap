@@ -251,6 +251,42 @@ exports[`UI snapshot states > matches snapshot during import in progress > impor
           class="stack-card"
         >
           <h2>
+            VLM autopilot
+          </h2>
+          <div
+            class="vlm-status vlm-status--idle"
+          >
+            <p
+              class="vlm-status__message"
+            >
+              No objective processed yet by the VLM autopilot.
+            </p>
+            <dl
+              class="vlm-status__details"
+            >
+              <div>
+                <dt>
+                  Objective
+                </dt>
+                <dd>
+                  —
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  Status
+                </dt>
+                <dd>
+                  idle
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+        <section
+          class="stack-card"
+        >
+          <h2>
             Âme hall
           </h2>
           <div
@@ -885,6 +921,42 @@ exports[`UI snapshot states > matches snapshot for empty vault > empty-vault 1`]
           class="stack-card"
         >
           <h2>
+            VLM autopilot
+          </h2>
+          <div
+            class="vlm-status vlm-status--idle"
+          >
+            <p
+              class="vlm-status__message"
+            >
+              No objective processed yet by the VLM autopilot.
+            </p>
+            <dl
+              class="vlm-status__details"
+            >
+              <div>
+                <dt>
+                  Objective
+                </dt>
+                <dd>
+                  —
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  Status
+                </dt>
+                <dd>
+                  idle
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+        <section
+          class="stack-card"
+        >
+          <h2>
             Âme hall
           </h2>
           <div
@@ -1514,6 +1586,42 @@ exports[`UI snapshot states > matches snapshot with stored snapshot ready > stor
       <aside
         class="stack-pane"
       >
+        <section
+          class="stack-card"
+        >
+          <h2>
+            VLM autopilot
+          </h2>
+          <div
+            class="vlm-status vlm-status--idle"
+          >
+            <p
+              class="vlm-status__message"
+            >
+              No objective processed yet by the VLM autopilot.
+            </p>
+            <dl
+              class="vlm-status__details"
+            >
+              <div>
+                <dt>
+                  Objective
+                </dt>
+                <dd>
+                  —
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  Status
+                </dt>
+                <dd>
+                  idle
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </section>
         <section
           class="stack-card"
         >

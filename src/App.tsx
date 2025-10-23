@@ -16,6 +16,7 @@ import {
   ManualStep,
   defaultStageContent
 } from './config/agentProfiles';
+import { resolveDefaultLmStudioConfig } from './config/vlm';
 import {
   ensureVaultMigrated,
   listSnapshots,
@@ -27,6 +28,11 @@ import {
   getStoredActiveSnapshotId,
   storeActiveSnapshotId
 } from './services/snapshotVault';
+import {
+  requestComputerUseAction,
+  summarizeToolCall,
+  type ComputerUseToolCall
+} from './services/lmStudioVlmClient';
 import useActionRunner from './hooks/useActionRunner';
 import { BootStage, StageContent, BootStageContentSet } from './types/boot';
 
@@ -35,6 +41,7 @@ type SnapshotStage = 'checking' | 'missing' | 'importing' | 'capturing' | 'ready
 type SnapshotSource = 'none' | 'stored' | 'uploaded' | 'captured';
 type StatusPillState = BootStage | 'ready' | 'manual' | 'error' | 'importing' | 'capturing';
 type AssetStatusState = 'unknown' | 'available' | 'missing' | 'downloading' | 'error';
+type VlmPhase = 'idle' | 'capturing' | 'requesting' | 'success' | 'error';
 
 declare global {
   interface Window {
@@ -54,6 +61,16 @@ interface AssetStatus {
   error?: string;
   size?: number;
   downloaded?: boolean;
+}
+
+interface VlmStatus {
+  phase: VlmPhase;
+  objective: string | null;
+  message: string;
+  actionSummary?: string;
+  toolCall?: ComputerUseToolCall;
+  rawText?: string;
+  error?: string;
 }
 
 const PROFILE_STORAGE_KEY = 'enigma-shell:profile';
@@ -140,6 +157,11 @@ const App: React.FC = () => {
   const [renamingSnapshotId, setRenamingSnapshotId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [downloadedAssets, setDownloadedAssets] = useState<Record<string, ArrayBuffer>>({});
+  const [vlmState, setVlmState] = useState<VlmStatus>({
+    phase: 'idle',
+    objective: null,
+    message: 'No objective processed yet by the VLM autopilot.'
+  });
 
   const emulatorRef = useRef<EmulatorRef | null>(null);
   const objectiveInputRef = useRef<HTMLInputElement>(null);
@@ -157,6 +179,9 @@ const App: React.FC = () => {
     snapshot: activeProfile.stageContent?.snapshot ?? defaultStageSets.snapshot,
     manual: activeProfile.stageContent?.manual ?? defaultStageSets.manual
   }), [activeProfile]);
+
+  const vlmConfig = useMemo(() => resolveDefaultLmStudioConfig(), []);
+  const isVlmBusy = vlmState.phase === 'capturing' || vlmState.phase === 'requesting';
 
   const automation = activeProfile.automation;
   const loginPromptsLower = useMemo(() => {
@@ -1056,18 +1081,88 @@ const App: React.FC = () => {
   }, [activeProfile.id, availableSnapshots]);
 
   const handleObjectiveSubmit = useCallback(
-    (objective: string) => {
-      if (!isReadyForInput) return;
+    async (objective: string) => {
+      if (!isReadyForInput || isVlmBusy) {
+        return;
+      }
       const trimmed = objective.trim();
-      if (!trimmed) return;
-      console.log('New objective for VLM:', trimmed);
-      setStatus(`Objective received: "${trimmed}"`);
+      if (!trimmed) {
+        return;
+      }
+
       const emulator = emulatorRef.current;
-      if (emulator) {
-        emulator.runCommand(trimmed);
+      if (!emulator) {
+        setStatus('The emulator is not ready to receive objectives yet.');
+        return;
+      }
+
+      setVlmState({
+        phase: 'capturing',
+        objective: trimmed,
+        message: 'Capturing the VM viewport for the VLM autopilot…'
+      });
+      setStatus(`Objective received: "${trimmed}". Preparing context for the VLM autopilot…`);
+
+      let screenshot: string | null = null;
+      try {
+        screenshot = emulator.captureScreenshot
+          ? await emulator.captureScreenshot({ format: 'image/png' })
+          : null;
+      } catch (error) {
+        console.error('Failed to capture VM screenshot for VLM.', error);
+      }
+
+      if (!screenshot) {
+        setVlmState({
+          phase: 'error',
+          objective: trimmed,
+          message: 'Unable to capture the VM viewport.',
+          error: 'The emulator did not provide a framebuffer capture.'
+        });
+        setStatus('Failed to capture the VM viewport. Objective not sent to the VLM autopilot.');
+        return;
+      }
+
+      setVlmState({
+        phase: 'requesting',
+        objective: trimmed,
+        message: 'Sending objective and screenshot to LM Studio…'
+      });
+      setStatus('Objective forwarded to the VLM autopilot. Awaiting LM Studio response…');
+
+      try {
+        const completion = await requestComputerUseAction({
+          objective: trimmed,
+          screenshotDataUrl: screenshot,
+          baseUrl: vlmConfig.baseUrl,
+          model: vlmConfig.model,
+          temperature: vlmConfig.temperature,
+          maxOutputTokens: vlmConfig.maxOutputTokens,
+          display: { width: vlmConfig.displayWidth, height: vlmConfig.displayHeight }
+        });
+
+        const summary = summarizeToolCall(completion.toolCall);
+        setVlmState({
+          phase: 'success',
+          objective: trimmed,
+          message: summary,
+          actionSummary: summary,
+          toolCall: completion.toolCall,
+          rawText: completion.rawText
+        });
+        setStatus('VLM autopilot responded. Review the suggested action in the autopilot panel.');
+      } catch (error) {
+        const message = (error as Error)?.message ?? 'Unknown LM Studio error';
+        setVlmState({
+          phase: 'error',
+          objective: trimmed,
+          message: 'VLM autopilot request failed.',
+          error: message
+        });
+        setStatus(`VLM autopilot request failed: ${message}`);
       }
     },
-    [isReadyForInput]
+    [isReadyForInput, isVlmBusy, vlmConfig, setStatus]
   );
 
   const downloadEntries = useMemo(() => Object.entries(downloadState), [downloadState]);
@@ -1078,7 +1173,7 @@ const App: React.FC = () => {
       if (!objectiveInputRef.current) return;
       const value = objectiveInputRef.current.value;
       if (!value.trim()) return;
-      handleObjectiveSubmit(value);
+      void handleObjectiveSubmit(value);
       objectiveInputRef.current.value = '';
     },
     [handleObjectiveSubmit]
@@ -1190,8 +1285,39 @@ const App: React.FC = () => {
     if (!isReadyForInput) {
       return activeStageContent.summary;
     }
+    if (isVlmBusy) {
+      return 'The VLM autopilot is analysing the previous objective.';
+    }
+    if (vlmState.phase === 'error' && vlmState.error) {
+      return `VLM autopilot error: ${vlmState.error}`;
+    }
+    if (vlmState.phase === 'success' && vlmState.actionSummary) {
+      return `Autopilot ready. Last action: ${vlmState.actionSummary}`;
+    }
     return 'Décrivez un objectif : le VLM rejouera des actions clavier/souris dans la VM pour l’accomplir.';
-  }, [activeProfile.manualSteps.length, activeStageContent.summary, isReadyForInput, snapshotStage, usingSavedState]);
+  }, [
+    activeProfile.manualSteps.length,
+    activeStageContent.summary,
+    isReadyForInput,
+    isVlmBusy,
+    snapshotStage,
+    usingSavedState,
+    vlmState.actionSummary,
+    vlmState.error,
+    vlmState.phase
+  ]);
+
+  const objectivePlaceholder = useMemo(() => {
+    if (!isReadyForInput) {
+      return 'Agent is preparing…';
+    }
+    if (isVlmBusy) {
+      return 'VLM autopilot is processing the previous objective…';
+    }
+    return 'Enter an objective for the agent…';
+  }, [isReadyForInput, isVlmBusy]);
+
+  const canSubmitObjective = isReadyForInput && !isVlmBusy;
 
   const snapshotSourceLabel = useMemo(() => {
     if (snapshotStage !== 'ready') {
@@ -1324,6 +1450,55 @@ const App: React.FC = () => {
         </main>
 
         <aside className="stack-pane">
+          <section className="stack-card">
+            <h2>VLM autopilot</h2>
+            <div className={`vlm-status vlm-status--${vlmState.phase}`}>
+              <p className="vlm-status__message">{vlmState.message}</p>
+              <dl className="vlm-status__details">
+                <div>
+                  <dt>Objective</dt>
+                  <dd>{vlmState.objective ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>{vlmState.phase}</dd>
+                </div>
+                {vlmState.toolCall?.arguments?.coordinate && (
+                  <div>
+                    <dt>Coordinate</dt>
+                    <dd>
+                      {Math.round(vlmState.toolCall.arguments.coordinate.x ?? 0)} ×
+                      {Math.round(vlmState.toolCall.arguments.coordinate.y ?? 0)}
+                      {vlmState.toolCall.arguments.coordinate.referenceWidth &&
+                        vlmState.toolCall.arguments.coordinate.referenceHeight &&
+                        ` on ${vlmState.toolCall.arguments.coordinate.referenceWidth}×${vlmState.toolCall.arguments.coordinate.referenceHeight}`}
+                    </dd>
+                  </div>
+                )}
+                {vlmState.toolCall?.arguments?.action && (
+                  <div>
+                    <dt>Action</dt>
+                    <dd>{vlmState.toolCall.arguments.action}</dd>
+                  </div>
+                )}
+                {vlmState.toolCall?.arguments?.text && (
+                  <div>
+                    <dt>Text</dt>
+                    <dd>
+                      <code>{vlmState.toolCall.arguments.text}</code>
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              {vlmState.error && <p className="vlm-status__error">{vlmState.error}</p>}
+              {vlmState.rawText && (
+                <details className="vlm-status__raw">
+                  <summary>Raw response</summary>
+                  <pre>{vlmState.rawText}</pre>
+                </details>
+              )}
+            </div>
+          </section>
           <section className="stack-card">
             <h2>Âme hall</h2>
             <div className="snapshot-hall">
@@ -1535,10 +1710,10 @@ const App: React.FC = () => {
           <input
             ref={objectiveInputRef}
             type="text"
-            placeholder={isReadyForInput ? 'Enter an objective for the agent…' : 'Agent is preparing…'}
-            disabled={!isReadyForInput}
+            placeholder={objectivePlaceholder}
+            disabled={!canSubmitObjective}
           />
-          <button type="submit" disabled={!isReadyForInput}>
+          <button type="submit" disabled={!canSubmitObjective}>
             Send
           </button>
         </form>
