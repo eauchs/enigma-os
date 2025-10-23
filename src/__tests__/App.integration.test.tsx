@@ -58,7 +58,8 @@ vi.mock('../components/Emulator', () => {
           runKeyboardCommand: vi.fn(),
           serial0_send: vi.fn(),
           keyboardType: vi.fn(),
-          saveState: vi.fn(async () => new ArrayBuffer(4))
+          saveState: vi.fn(async () => new ArrayBuffer(4)),
+          captureScreenshot: vi.fn(async () => 'data:image/png;base64,integration')
         }),
         []
       );

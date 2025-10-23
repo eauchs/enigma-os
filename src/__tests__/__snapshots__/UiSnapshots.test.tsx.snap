@@ -221,18 +221,68 @@ exports[`UI snapshot states > matches snapshot during import in progress > impor
             Serial feed
           </h2>
           <div
-            aria-live="polite"
-            class="console-feed"
+            class="serial-console"
           >
-            <pre>
-              Waiting for serial output…
-            </pre>
+            <div
+              aria-live="polite"
+              class="console-feed"
+            >
+              <pre>
+                Waiting for serial output…
+              </pre>
+            </div>
+            <div
+              class="console-actions"
+            >
+              <button
+                disabled=""
+                type="button"
+              >
+                Copy serial log
+              </button>
+            </div>
           </div>
         </section>
       </main>
       <aside
         class="stack-pane"
       >
+        <section
+          class="stack-card"
+        >
+          <h2>
+            VLM autopilot
+          </h2>
+          <div
+            class="vlm-status vlm-status--idle"
+          >
+            <p
+              class="vlm-status__message"
+            >
+              No objective processed yet by the VLM autopilot.
+            </p>
+            <dl
+              class="vlm-status__details"
+            >
+              <div>
+                <dt>
+                  Objective
+                </dt>
+                <dd>
+                  —
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  Status
+                </dt>
+                <dd>
+                  idle
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </section>
         <section
           class="stack-card"
         >
@@ -841,18 +891,68 @@ exports[`UI snapshot states > matches snapshot for empty vault > empty-vault 1`]
             Serial feed
           </h2>
           <div
-            aria-live="polite"
-            class="console-feed"
+            class="serial-console"
           >
-            <pre>
-              Waiting for serial output…
-            </pre>
+            <div
+              aria-live="polite"
+              class="console-feed"
+            >
+              <pre>
+                Waiting for serial output…
+              </pre>
+            </div>
+            <div
+              class="console-actions"
+            >
+              <button
+                disabled=""
+                type="button"
+              >
+                Copy serial log
+              </button>
+            </div>
           </div>
         </section>
       </main>
       <aside
         class="stack-pane"
       >
+        <section
+          class="stack-card"
+        >
+          <h2>
+            VLM autopilot
+          </h2>
+          <div
+            class="vlm-status vlm-status--idle"
+          >
+            <p
+              class="vlm-status__message"
+            >
+              No objective processed yet by the VLM autopilot.
+            </p>
+            <dl
+              class="vlm-status__details"
+            >
+              <div>
+                <dt>
+                  Objective
+                </dt>
+                <dd>
+                  —
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  Status
+                </dt>
+                <dd>
+                  idle
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </section>
         <section
           class="stack-card"
         >
@@ -1460,18 +1560,68 @@ exports[`UI snapshot states > matches snapshot with stored snapshot ready > stor
             Serial feed
           </h2>
           <div
-            aria-live="polite"
-            class="console-feed"
+            class="serial-console"
           >
-            <pre>
-              Waiting for serial output…
-            </pre>
+            <div
+              aria-live="polite"
+              class="console-feed"
+            >
+              <pre>
+                Waiting for serial output…
+              </pre>
+            </div>
+            <div
+              class="console-actions"
+            >
+              <button
+                disabled=""
+                type="button"
+              >
+                Copy serial log
+              </button>
+            </div>
           </div>
         </section>
       </main>
       <aside
         class="stack-pane"
       >
+        <section
+          class="stack-card"
+        >
+          <h2>
+            VLM autopilot
+          </h2>
+          <div
+            class="vlm-status vlm-status--idle"
+          >
+            <p
+              class="vlm-status__message"
+            >
+              No objective processed yet by the VLM autopilot.
+            </p>
+            <dl
+              class="vlm-status__details"
+            >
+              <div>
+                <dt>
+                  Objective
+                </dt>
+                <dd>
+                  —
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  Status
+                </dt>
+                <dd>
+                  idle
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </section>
         <section
           class="stack-card"
         >

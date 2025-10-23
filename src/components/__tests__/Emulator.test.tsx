@@ -106,4 +106,29 @@ describe('Emulator component', () => {
     );
     expect(onDownloadError).toHaveBeenCalledWith({ fileName: 'iso', status: 404, statusText: 'Not Found' });
   });
+
+  it('exposes a captureScreenshot helper returning a data URL', async () => {
+    const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    const toDataURLMock = vi.fn(() => 'data:image/png;base64,stub');
+    Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', {
+      configurable: true,
+      value: toDataURLMock
+    });
+
+    render(<Emulator ref={ref} />);
+    await waitFor(() => expect(window.V86Starter).toHaveBeenCalled());
+
+    const screenshot = await ref.current?.captureScreenshot();
+    expect(screenshot).toBe('data:image/png;base64,stub');
+    expect(toDataURLMock).toHaveBeenCalled();
+
+    if (originalToDataURL) {
+      Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', {
+        configurable: true,
+        value: originalToDataURL
+      });
+    } else {
+      delete (HTMLCanvasElement.prototype as { toDataURL?: typeof toDataURL }).toDataURL;
+    }
+  });
 });

@@ -258,6 +258,36 @@ input {
   word-break: break-word;
 }
 
+.serial-console {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.console-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.console-actions__feedback {
+  font-size: 0.75rem;
+  color: var(--color-text-soft);
+  margin-right: auto;
+}
+
+.console-actions__feedback--success {
+  color: rgba(38, 255, 230, 0.8);
+}
+
+.console-actions__feedback--error {
+  color: var(--color-rose);
+}
+
+.console-actions__feedback--info {
+  color: var(--color-text-muted);
+}
+
 .console-feed::-webkit-scrollbar {
   width: 8px;
 }
@@ -292,6 +322,98 @@ input {
   letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--color-text-soft);
+}
+
+.vlm-status {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: var(--radius-medium);
+  border: 1px solid rgba(38, 255, 230, 0.22);
+  background: rgba(7, 12, 24, 0.7);
+  padding: 16px 18px;
+}
+
+.vlm-status--capturing,
+.vlm-status--requesting {
+  border-color: rgba(255, 184, 74, 0.4);
+  box-shadow: 0 12px 28px rgba(255, 184, 74, 0.15);
+}
+
+.vlm-status--success {
+  border-color: rgba(38, 255, 230, 0.45);
+  box-shadow: 0 12px 28px rgba(38, 255, 230, 0.12);
+}
+
+.vlm-status--error {
+  border-color: rgba(255, 112, 140, 0.5);
+  background: rgba(35, 2, 16, 0.6);
+}
+
+.vlm-status__message {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.vlm-status__details {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+.vlm-status__details div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vlm-status__details dt {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  color: var(--color-text-soft);
+}
+
+.vlm-status__details dd {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--color-text-primary);
+  word-break: break-word;
+}
+
+.vlm-status__details code {
+  background: rgba(4, 8, 16, 0.85);
+  padding: 4px 6px;
+  border-radius: var(--radius-small);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.8rem;
+}
+
+.vlm-status__error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(255, 132, 160, 0.9);
+}
+
+.vlm-status__raw {
+  font-size: 0.75rem;
+}
+
+.vlm-status__raw summary {
+  cursor: pointer;
+  color: rgba(200, 218, 255, 0.75);
+}
+
+.vlm-status__raw pre {
+  background: rgba(3, 6, 14, 0.9);
+  padding: 10px 12px;
+  border-radius: var(--radius-small);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .snapshot-hall {
