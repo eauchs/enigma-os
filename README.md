@@ -1,7 +1,15 @@
 # Enigma OS 🔧
 
-## Agent souverain, cockpit contrôlé
-Cette version d’Enigma Shell sert d’hôte à l’**Agent Souverain Nomade** : une IA persistante qui s’exécute dans sa propre machine virtuelle v86, capturable et réhydratable à volonté. L’interface « Control Room » fournit une vision synthétique de l’état de l’agent :
+## Vue d’ensemble du projet
+Enigma OS est l’hôte applicatif de l’**Agent Souverain Nomade** : une IA persistante qui s’exécute dans sa propre machine virtuelle v86, capturable et réhydratable à volonté. Le projet combine une application Electron (shell) et une interface web React/Vite (renderer) orchestrées autour d’un ensemble de services partagés (`src/`).
+
+### Architecture rapide
+- **Electron (`electron/`)** : initialise la fenêtre principale, gère les menus et le cycle de vie natif, expose des bridges IPC vers le renderer.
+- **Renderer (`src/`)** : application React (hooks, Zustand, TanStack Query) qui pilote l’émulateur, l’Asset Matrix, le Playbook et les snapshots.
+- **Scripts (`scripts/`)** : utilitaires de build/packaging (copie d’assets, postinstall, generation de manifestes).
+- **Tests (`tests/`, `vitest.config.ts`, `playwright.config.ts`)** : batterie de tests unitaires, de typings (tsd) et end-to-end.
+
+L’interface « Control Room » fournit ensuite une vision synthétique de l’état de l’agent :
 
 - **Navigation latérale minimaliste** : synthèse du boot en cours, statut de l’Âme active, sélection du profil d’OS et actions rapides (import/capture/playbook).
 - **Portail VM** : rendu v86, timeline de boot (Idle → Login → Shell → GUI) et console série holographique pour déboguer en direct.
@@ -65,5 +73,19 @@ npm run e2e          # scénario Playwright (penser à npx playwright install)
 - **Coffre-fort distribué** : synchroniser les Âmes avec un stockage externe chiffré (S3/R2, B2, NAS personnel) + signature MetaMask pour tracer l’identité souveraine.
 - **Boucle VLM** : brancher LM Studio/ModelBits dans la VM, capturer le framebuffer, inférer les actions et les rejouer via l’API hôte.
 - **Télécommande PWA + WebRTC** : visualiser l’écran, pousser les objectifs et suivre les logs depuis mobile.
+
+### Prochaines étapes priorisées
+1. **Stabiliser l’émulateur**
+   - Finaliser la gestion des erreurs lors du chargement d’assets (retry, fallback local).
+   - Mécanisme de nettoyage du cache IndexedDB pour éviter la corruption de snapshots.
+2. **Améliorer l’onboarding**
+   - Guide interactif (tours) pour expliquer les zones de la Control Room.
+   - Pré-configuration de profils supplémentaires (ex. Ubuntu Server, Windows 98) avec scripts d’amorçage prêts.
+3. **Boucle d’automatisation**
+   - Prototype d’intégration VLM avec exécution d’intentions simples.
+   - Observabilité renforcée : logs structurés + export JSON des sessions.
+4. **Distribution**
+   - Pipeline CI pour empaquetage multi-plateforme (macOS, Windows, Linux AppImage).
+   - Signature/Notarisation automatisée et publication sur une page de releases.
 
 Ce travail prépare l’étape suivante : intégrer réellement le modèle visuel et automatiser la boucle d’objectifs. L’interface et le coffre d’Âmes sont désormais prêts à accueillir cette couche VLM.
