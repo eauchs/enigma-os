@@ -37,6 +37,7 @@ export interface RequestComputerUseActionOptions {
   display?: { width: number; height: number };
   fetchImplementation?: typeof fetch;
   headers?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 interface ChatCompletionResponse {
@@ -190,7 +191,8 @@ export const requestComputerUseAction = async (
     maxOutputTokens,
     display,
     fetchImplementation,
-    headers
+    headers,
+    signal
   } = options;
 
   const config = resolveDefaultLmStudioConfig();
@@ -241,7 +243,8 @@ export const requestComputerUseAction = async (
       'Content-Type': 'application/json',
       ...headers
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal
   });
 
   if (!response.ok) {

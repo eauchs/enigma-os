@@ -29,10 +29,13 @@ import {
   storeActiveSnapshotId
 } from './services/snapshotVault';
 import {
-  requestComputerUseAction,
-  summarizeToolCall,
-  type ComputerUseToolCall
-} from './services/lmStudioVlmClient';
+  processObjective,
+  VlmServiceError,
+  executeToolCall,
+  type ComputerUseToolCall,
+  type VlmProcessingMetrics
+} from './services/llmService';
+import { summarizeToolCall } from './services/lmStudioVlmClient';
 import useActionRunner from './hooks/useActionRunner';
 import { BootStage, StageContent, BootStageContentSet } from './types/boot';
 
@@ -41,7 +44,7 @@ type SnapshotStage = 'checking' | 'missing' | 'importing' | 'capturing' | 'ready
 type SnapshotSource = 'none' | 'stored' | 'uploaded' | 'captured';
 type StatusPillState = BootStage | 'ready' | 'manual' | 'error' | 'importing' | 'capturing';
 type AssetStatusState = 'unknown' | 'available' | 'missing' | 'downloading' | 'error';
-type VlmPhase = 'idle' | 'capturing' | 'requesting' | 'success' | 'error';
+type VlmPhase = 'idle' | 'capturing' | 'requesting' | 'executing' | 'success' | 'error';
 
 declare global {
   interface Window {
@@ -71,6 +74,11 @@ interface VlmStatus {
   toolCall?: ComputerUseToolCall;
   rawText?: string;
   error?: string;
+  metrics?: VlmProcessingMetrics;
+  configSnapshot?: {
+    temperature: number;
+    maxOutputTokens: number;
+  };
 }
 
 const PROFILE_STORAGE_KEY = 'enigma-shell:profile';
@@ -170,6 +178,7 @@ const App: React.FC = () => {
   const hasBootstrapped = useRef(false);
   const bootStageRef = useRef<BootStage>('idle');
   const pendingSnapshotSourceRef = useRef<SnapshotSource>('none');
+  const assetDownloadControllersRef = useRef<Record<string, AbortController>>({});
 
   const activeProfile = useMemo<AgentProfile>(() => {
     return agentProfiles.find((profile) => profile.id === profileId) ?? agentProfiles[0];
@@ -181,7 +190,8 @@ const App: React.FC = () => {
   }), [activeProfile]);
 
   const vlmConfig = useMemo(() => resolveDefaultLmStudioConfig(), []);
-  const isVlmBusy = vlmState.phase === 'capturing' || vlmState.phase === 'requesting';
+  const isVlmBusy =
+    vlmState.phase === 'capturing' || vlmState.phase === 'requesting' || vlmState.phase === 'executing';
 
   const automation = activeProfile.automation;
   const loginPromptsLower = useMemo(() => {
@@ -204,6 +214,15 @@ const App: React.FC = () => {
     });
     return map;
   }, [activeProfile.assetManifest]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(assetDownloadControllersRef.current).forEach((controller) => {
+        controller?.abort();
+      });
+      assetDownloadControllersRef.current = {};
+    };
+  }, []);
 
   const resolvedEmulatorConfig = useMemo<EmulatorBootConfig>(() => {
     const source = activeProfile.emulator;
@@ -617,6 +636,10 @@ const App: React.FC = () => {
         return;
       }
       try {
+        if (assetDownloadControllersRef.current[asset.path]) {
+          assetDownloadControllersRef.current[asset.path]?.abort();
+          delete assetDownloadControllersRef.current[asset.path];
+        }
         const buffer = await file.arrayBuffer();
         setDownloadedAssets((previous) => ({
           ...previous,
@@ -634,6 +657,10 @@ const App: React.FC = () => {
           }
         }));
         setStatus(`${asset.label} importé depuis le fichier local.`);
+        setDownloadState((previous) => {
+          const { [asset.path]: _, ...rest } = previous;
+          return rest;
+        });
       } catch (error) {
         const message = (error as Error)?.message ?? 'Import failed';
         setAssetStatusMap((previous) => ({
@@ -672,6 +699,173 @@ const App: React.FC = () => {
     },
     [handleManualAssetImport]
   );
+
+  const handleAssetDownload = useCallback(
+    async (asset: AgentProfile['assetManifest'][number]) => {
+      if (!asset.downloadUrl) {
+        window.open(asset.path, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      try {
+        assetDownloadControllersRef.current[asset.path]?.abort();
+      } catch {
+        // ignore cancellation failures
+      }
+
+      const controller = new AbortController();
+      assetDownloadControllersRef.current[asset.path] = controller;
+
+      setAssetStatusMap((previous) => ({
+        ...previous,
+        [asset.path]: {
+          status: 'downloading',
+          loaded: 0,
+          total: previous[asset.path]?.total,
+          downloaded: previous[asset.path]?.downloaded ?? false,
+          error: undefined
+        }
+      }));
+      setDownloadState((previous) => ({
+        ...previous,
+        [asset.path]: {
+          loaded: 0,
+          total: previous[asset.path]?.total,
+          error: undefined
+        }
+      }));
+      setStatus(`Downloading ${asset.label}…`);
+
+      try {
+        const response = await fetch(asset.downloadUrl, { signal: controller.signal });
+        if (!response.ok || !response.body) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const sizeHeader = response.headers.get('content-length');
+        const totalBytes = sizeHeader ? Number(sizeHeader) : undefined;
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value);
+            received += value.length;
+
+            setAssetStatusMap((previous) => ({
+              ...previous,
+              [asset.path]: {
+                status: 'downloading',
+                loaded: received,
+                total: totalBytes ?? previous[asset.path]?.total,
+                downloaded: previous[asset.path]?.downloaded ?? false,
+                error: undefined
+              }
+            }));
+            setDownloadState((previous) => ({
+              ...previous,
+              [asset.path]: {
+                loaded: received,
+                total: totalBytes,
+                error: undefined
+              }
+            }));
+          }
+        }
+
+        const merged = new Uint8Array(received);
+        let offset = 0;
+        for (const chunk of chunks) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+
+        const buffer = merged.buffer;
+        setDownloadedAssets((previous) => ({
+          ...previous,
+          [asset.path]: buffer
+        }));
+        setAssetStatusMap((previous) => ({
+          ...previous,
+          [asset.path]: {
+            status: 'available',
+            downloaded: true,
+            size: received,
+            loaded: received,
+            total: received,
+            error: undefined
+          }
+        }));
+        setDownloadState((previous) => {
+          const { [asset.path]: _, ...rest } = previous;
+          return rest;
+        });
+        setStatus(`${asset.label} downloaded and injected into the current session.`);
+      } catch (error) {
+        if (controller.signal.aborted) {
+          setStatus(`${asset.label} download cancelled.`);
+          setAssetStatusMap((previous) => ({
+            ...previous,
+            [asset.path]: {
+              status: 'missing',
+              error: 'Download cancelled',
+              downloaded: false,
+              loaded: previous[asset.path]?.loaded,
+              total: previous[asset.path]?.total
+            }
+          }));
+        } else {
+          const message = (error as Error)?.message ?? 'Download failed';
+          setStatus(`Failed to download ${asset.label}: ${message}`);
+          setAssetStatusMap((previous) => ({
+            ...previous,
+            [asset.path]: {
+              status: 'error',
+              error: message,
+              downloaded: false,
+              loaded: previous[asset.path]?.loaded,
+              total: previous[asset.path]?.total
+            }
+          }));
+        }
+        setDownloadState((previous) => {
+          const { [asset.path]: _, ...rest } = previous;
+          return rest;
+        });
+      } finally {
+        if (assetDownloadControllersRef.current[asset.path] === controller) {
+          delete assetDownloadControllersRef.current[asset.path];
+        }
+      }
+    },
+    []
+  );
+
+  const handleAssetDownloadCancel = useCallback((asset: AgentProfile['assetManifest'][number]) => {
+    const controller = assetDownloadControllersRef.current[asset.path];
+    if (controller) {
+      controller.abort();
+      delete assetDownloadControllersRef.current[asset.path];
+    }
+    setAssetStatusMap((previous) => ({
+      ...previous,
+      [asset.path]: {
+        status: 'missing',
+        error: 'Download cancelled',
+        downloaded: false,
+        loaded: previous[asset.path]?.loaded,
+        total: previous[asset.path]?.total
+      }
+    }));
+    setDownloadState((previous) => {
+      const { [asset.path]: _, ...rest } = previous;
+      return rest;
+    });
+    setStatus(`${asset.label} download cancelled.`);
+  }, []);
 
   const handleEmulatorError = useCallback((error: Error) => {
     console.error('Emulator encountered an error', error);
@@ -1099,65 +1293,146 @@ const App: React.FC = () => {
       setVlmState({
         phase: 'capturing',
         objective: trimmed,
-        message: 'Capturing the VM viewport for the VLM autopilot…'
+        message: 'Capturing the VM viewport for the VLM autopilot…',
+        actionSummary: undefined,
+        toolCall: undefined,
+        rawText: undefined,
+        error: undefined,
+        metrics: undefined,
+        configSnapshot: undefined
       });
       setStatus(`Objective received: "${trimmed}". Preparing context for the VLM autopilot…`);
 
-      let screenshot: string | null = null;
+      let processingPromise: ReturnType<typeof processObjective>;
       try {
-        screenshot = emulator.captureScreenshot
-          ? await emulator.captureScreenshot({ format: 'image/png' })
-          : null;
+        processingPromise = processObjective({
+          objective: trimmed,
+          emulator,
+          configOverrides: vlmConfig
+        });
       } catch (error) {
-        console.error('Failed to capture VM screenshot for VLM.', error);
-      }
-
-      if (!screenshot) {
+        const message =
+          error instanceof VlmServiceError
+            ? error.message
+            : (error as Error)?.message ?? 'Unknown LM Studio error';
         setVlmState({
           phase: 'error',
           objective: trimmed,
-          message: 'Unable to capture the VM viewport.',
-          error: 'The emulator did not provide a framebuffer capture.'
+          message: 'Unable to prepare the VLM request.',
+          actionSummary: undefined,
+          toolCall: undefined,
+          rawText: undefined,
+          error: message,
+          metrics: undefined,
+          configSnapshot: undefined
         });
-        setStatus('Failed to capture the VM viewport. Objective not sent to the VLM autopilot.');
+        setStatus(`Failed to prepare the VLM request: ${message}`);
         return;
       }
 
       setVlmState({
         phase: 'requesting',
         objective: trimmed,
-        message: 'Sending objective and screenshot to LM Studio…'
+        message: 'Sending objective and screenshot to LM Studio…',
+        actionSummary: undefined,
+        toolCall: undefined,
+        rawText: undefined,
+        error: undefined,
+        metrics: undefined,
+        configSnapshot: undefined
       });
       setStatus('Objective forwarded to the VLM autopilot. Awaiting LM Studio response…');
 
       try {
-        const completion = await requestComputerUseAction({
-          objective: trimmed,
-          screenshotDataUrl: screenshot,
-          baseUrl: vlmConfig.baseUrl,
-          model: vlmConfig.model,
-          temperature: vlmConfig.temperature,
-          maxOutputTokens: vlmConfig.maxOutputTokens,
-          display: { width: vlmConfig.displayWidth, height: vlmConfig.displayHeight }
-        });
+        const result = await processingPromise;
+        const configSnapshot = {
+          temperature: result.config.temperature,
+          maxOutputTokens: result.config.maxOutputTokens
+        };
 
-        const summary = summarizeToolCall(completion.toolCall);
+        if (!result.toolCall) {
+          const noActionSummary = summarizeToolCall(result.toolCall);
+          setVlmState({
+            phase: 'error',
+            objective: trimmed,
+            message: 'The VLM autopilot did not return an actionable tool call.',
+            actionSummary: noActionSummary,
+            toolCall: undefined,
+            rawText: result.completion.rawText,
+            error: 'Missing tool call.',
+            metrics: result.metrics,
+            configSnapshot
+          });
+          setStatus('VLM autopilot responded without actionable steps. Please retry with a clearer objective.');
+          return;
+        }
+
+        const summary = summarizeToolCall(result.toolCall);
+
         setVlmState({
-          phase: 'success',
+          phase: 'executing',
           objective: trimmed,
-          message: summary,
+          message: 'Applying the autopilot suggestion inside the VM…',
           actionSummary: summary,
-          toolCall: completion.toolCall,
-          rawText: completion.rawText
+          toolCall: result.toolCall,
+          rawText: result.completion.rawText,
+          error: undefined,
+          metrics: result.metrics,
+          configSnapshot
         });
-        setStatus('VLM autopilot responded. Review the suggested action in the autopilot panel.');
+        setStatus('VLM autopilot responded. Replaying the suggested action inside the VM…');
+
+        try {
+          const execution = await executeToolCall(emulator, result.toolCall, {
+            display: { width: result.config.displayWidth, height: result.config.displayHeight },
+            focusViewport: true
+          });
+          const executionMessage = execution.message || summary;
+          setVlmState({
+            phase: 'success',
+            objective: trimmed,
+            message: executionMessage,
+            actionSummary: summary,
+            toolCall: result.toolCall,
+            rawText: result.completion.rawText,
+            error: undefined,
+            metrics: result.metrics,
+            configSnapshot
+          });
+          setStatus(`VLM autopilot executed: ${executionMessage}`);
+        } catch (executionError) {
+          const execMessage =
+            executionError instanceof VlmServiceError
+              ? executionError.message
+              : (executionError as Error)?.message ?? 'Unknown replay error';
+          setVlmState({
+            phase: 'error',
+            objective: trimmed,
+            message: 'Failed to replay the VLM action.',
+            actionSummary: summary,
+            toolCall: result.toolCall,
+            rawText: result.completion.rawText,
+            error: execMessage,
+            metrics: result.metrics,
+            configSnapshot
+          });
+          setStatus(`Failed to execute the autopilot action: ${execMessage}`);
+        }
       } catch (error) {
-        const message = (error as Error)?.message ?? 'Unknown LM Studio error';
+        const message =
+          error instanceof VlmServiceError
+            ? error.message
+            : (error as Error)?.message ?? 'Unknown LM Studio error';
         setVlmState({
           phase: 'error',
           objective: trimmed,
           message: 'VLM autopilot request failed.',
-          error: message
+          actionSummary: undefined,
+          toolCall: undefined,
+          rawText: undefined,
+          error: message,
+          metrics: undefined,
+          configSnapshot: undefined
         });
         setStatus(`VLM autopilot request failed: ${message}`);
       }
@@ -1357,368 +1632,478 @@ const App: React.FC = () => {
   }, [activeActionId, firstPlaybook, isActionRunning]);
 
   return (
-    <div className="canvas">
-      <div className="layout">
-        <aside className="nav-pane">
-          <div className="brand">
-            <span className="brand__mark" />
-            <div>
-              <div className="brand__title">Enigma OS</div>
-              <div className="brand__subtitle">Nomad Host</div>
+    <div className="app-shell">
+      <div className="app-frame">
+        <header className="app-header">
+          <div className="app-header__top">
+            <div className="app-header__brand">
+              <span className="brand-mark" />
+              <div>
+                <span className="brand-name">Enigma OS</span>
+                <span className="brand-tagline">{activeProfile.tagline}</span>
+              </div>
+            </div>
+            <div className="app-header__summary">
+              <div className="summary-card">
+                <span className="summary-card__label">Boot status</span>
+                <span className="summary-card__value">{statusPillSummary}</span>
+                <span className="summary-card__hint">{activeStageContent.title}</span>
+              </div>
+              <div className="summary-card">
+                <span className="summary-card__label">Snapshot</span>
+                <span className="summary-card__value">{snapshotStatusText}</span>
+                <span className="summary-card__hint">{snapshotSourceLabel}</span>
+              </div>
+            </div>
+            <div className="app-header__controls">
+              <label htmlFor="profile-select" className="app-header__label">
+                Profile
+              </label>
+              <select id="profile-select" value={profileId} onChange={handleProfileChange}>
+                {agentProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+              <div className="app-header__actions">
+                <button type="button" onClick={triggerSnapshotDialog} disabled={!canImportSnapshot}>
+                  Import Âme
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleCaptureSnapshot();
+                  }}
+                  disabled={!canCaptureSnapshot}
+                >
+                  Capture instantanée
+                </button>
+                {firstPlaybook && (
+                  <button
+                    type="button"
+                    onClick={() => runAction(firstPlaybook).catch(() => undefined)}
+                    disabled={isActionRunning}
+                  >
+                    {quickPlaybookLabel}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-          <p className="tagline">{activeProfile.tagline}</p>
-         <div className="nav-block">
-           <div className="status-puck">
-             <span className="status-puck__label">{statusPillLabel}</span>
-             <span className="status-puck__value">{statusPillSummary}</span>
-             <span className="status-puck__hint">Phase: {activeStageContent.title}</span>
-           </div>
-           <div className="status-puck">
-             <span className="status-puck__label">Snapshot</span>
-             <span className="status-puck__value">{snapshotStatusText}</span>
-             <span className="status-puck__hint">{snapshotSourceLabel}</span>
-           </div>
-            <p className="status-message">{status}</p>
-          </div>
-          <div className="nav-block">
-            <label htmlFor="profile-select" className="field-label">
-              Profile
-            </label>
-            <select id="profile-select" value={profileId} onChange={handleProfileChange}>
-              {agentProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="nav-actions">
-            <button type="button" onClick={triggerSnapshotDialog} disabled={!canImportSnapshot}>
-              Import Âme
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void handleCaptureSnapshot();
-              }}
-              disabled={!canCaptureSnapshot}
-            >
-              Capture instantanée
-            </button>
-            {firstPlaybook && (
-              <button
-                type="button"
-                onClick={() => runAction(firstPlaybook).catch(() => undefined)}
-                disabled={isActionRunning}
-              >
-                {quickPlaybookLabel}
-              </button>
-            )}
-          </div>
-        </aside>
+          <p className="app-header__status-message">{status}</p>
+        </header>
 
-        <main className="stage">
-          <section className="stage__shell">
-            <div className="shell-frame">
-              <Emulator
-                key={emulatorKey}
-                ref={emulatorRef}
-                initialState={initialState}
-                onReady={handleEmulatorReady}
-                onOutput={handleSerialOutput}
-                onDownloadProgress={handleDownloadProgress}
-                onDownloadError={handleDownloadError}
-                onError={handleEmulatorError}
-                emulatorConfig={resolvedEmulatorConfig}
-              />
-            </div>
-            <StatusRibbon
-              bootStage={bootStage}
-              stageContent={stageContent}
-              statusPillState={statusPillState}
-            />
-          </section>
-          <section className="stage__console">
-            <h2>Serial feed</h2>
-            <SerialConsole
-              log={serialOutput}
-              placeholder="Waiting for serial output…"
-              onCopyResult={handleSerialCopyResult}
-            />
-          </section>
-        </main>
+        <main className="app-main">
+          <section className="app-main__primary">
+            <section className="panel panel--emulator">
+              <div className="panel__header">
+                <div>
+                  <h2>Virtual machine</h2>
+                  <p className="panel__hint">{activeStageContent.summary}</p>
+                </div>
+                <span className={`panel-badge panel-badge--${statusPillState}`}>{statusPillLabel}</span>
+              </div>
+              <div className="panel__body panel__body--emulator">
+                <div className="emulator-frame">
+                  <Emulator
+                    key={emulatorKey}
+                    ref={emulatorRef}
+                    initialState={initialState}
+                    onReady={handleEmulatorReady}
+                    onOutput={handleSerialOutput}
+                    onDownloadProgress={handleDownloadProgress}
+                    onDownloadError={handleDownloadError}
+                    onError={handleEmulatorError}
+                    emulatorConfig={resolvedEmulatorConfig}
+                  />
+                </div>
+              </div>
+              <div className="panel__footer">
+                <StatusRibbon
+                  bootStage={bootStage}
+                  stageContent={stageContent}
+                  statusPillState={statusPillState}
+                />
+              </div>
+            </section>
 
-        <aside className="stack-pane">
-          <section className="stack-card">
-            <h2>VLM autopilot</h2>
-            <div className={`vlm-status vlm-status--${vlmState.phase}`}>
-              <p className="vlm-status__message">{vlmState.message}</p>
-              <dl className="vlm-status__details">
+            <section className="panel panel--console">
+              <div className="panel__header">
                 <div>
-                  <dt>Objective</dt>
-                  <dd>{vlmState.objective ?? '—'}</dd>
+                  <h2>Serial feed</h2>
+                  <p className="panel__hint">Live stream from the VM console.</p>
                 </div>
-                <div>
-                  <dt>Status</dt>
-                  <dd>{vlmState.phase}</dd>
-                </div>
-                {vlmState.toolCall?.arguments?.coordinate && (
-                  <div>
-                    <dt>Coordinate</dt>
-                    <dd>
-                      {Math.round(vlmState.toolCall.arguments.coordinate.x ?? 0)} ×
-                      {Math.round(vlmState.toolCall.arguments.coordinate.y ?? 0)}
-                      {vlmState.toolCall.arguments.coordinate.referenceWidth &&
-                        vlmState.toolCall.arguments.coordinate.referenceHeight &&
-                        ` on ${vlmState.toolCall.arguments.coordinate.referenceWidth}×${vlmState.toolCall.arguments.coordinate.referenceHeight}`}
-                    </dd>
-                  </div>
-                )}
-                {vlmState.toolCall?.arguments?.action && (
-                  <div>
-                    <dt>Action</dt>
-                    <dd>{vlmState.toolCall.arguments.action}</dd>
-                  </div>
-                )}
-                {vlmState.toolCall?.arguments?.text && (
-                  <div>
-                    <dt>Text</dt>
-                    <dd>
-                      <code>{vlmState.toolCall.arguments.text}</code>
-                    </dd>
-                  </div>
-                )}
-              </dl>
-              {vlmState.error && <p className="vlm-status__error">{vlmState.error}</p>}
-              {vlmState.rawText && (
-                <details className="vlm-status__raw">
-                  <summary>Raw response</summary>
-                  <pre>{vlmState.rawText}</pre>
-                </details>
-              )}
-            </div>
+              </div>
+              <div className="panel__body">
+                <SerialConsole
+                  log={serialOutput}
+                  placeholder="Waiting for serial output…"
+                  onCopyResult={handleSerialCopyResult}
+                />
+              </div>
+            </section>
           </section>
-          <section className="stack-card">
-            <h2>Âme hall</h2>
-            <div className="snapshot-hall">
-              {profileSnapshots.length === 0 && otherSnapshots.length === 0 ? (
-                <p className="snapshot-entry__meta">No Âme stored yet. Import or capture one to enable instant resumes.</p>
-              ) : (
-                <ul className="snapshot-list">
-                  {profileSnapshots.map((snapshot) => {
-                    const isActive = snapshot.id === activeSnapshotId;
-                    const isRenaming = renamingSnapshotId === snapshot.id;
-                    return (
-                      <li
-                        key={snapshot.id}
-                        className={`snapshot-entry ${isActive ? 'snapshot-entry--active' : ''}`}
-                      >
-                        <div className="snapshot-entry__main">
-                          {isRenaming ? (
-                            <input
-                              autoFocus
-                              value={renameDraft}
-                              onChange={(event) => setRenameDraft(event.target.value)}
-                              onKeyDown={handleRenameKeyDown}
-                            />
-                          ) : (
+
+          <aside className="app-main__sidebar">
+            <section className="panel panel--autopilot">
+              <div className="panel__header">
+                <div>
+                  <h2>VLM autopilot</h2>
+                  <p className="panel__hint">LM Studio command loop with viewport capture.</p>
+                </div>
+                <span className={`panel-badge panel-badge--${vlmState.phase}`}>{vlmState.phase}</span>
+              </div>
+              <div className="panel__body">
+                <div className={`vlm-status vlm-status--${vlmState.phase}`}>
+                  <p className="vlm-status__message">{vlmState.message}</p>
+                  <dl className="vlm-status__details">
+                    <div>
+                      <dt>Objective</dt>
+                      <dd>{vlmState.objective ?? '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>Status</dt>
+                      <dd>{vlmState.phase}</dd>
+                    </div>
+                    {vlmState.actionSummary && (
+                      <div>
+                        <dt>Summary</dt>
+                        <dd>{vlmState.actionSummary}</dd>
+                      </div>
+                    )}
+                    {vlmState.toolCall?.arguments?.coordinate && (
+                      <div>
+                        <dt>Coordinate</dt>
+                        <dd>
+                          {Math.round(vlmState.toolCall.arguments.coordinate.x ?? 0)} ×
+                          {Math.round(vlmState.toolCall.arguments.coordinate.y ?? 0)}
+                          {vlmState.toolCall.arguments.coordinate.referenceWidth &&
+                            vlmState.toolCall.arguments.coordinate.referenceHeight &&
+                            ` on ${vlmState.toolCall.arguments.coordinate.referenceWidth}×${vlmState.toolCall.arguments.coordinate.referenceHeight}`}
+                        </dd>
+                      </div>
+                    )}
+                    {vlmState.toolCall?.arguments?.action && (
+                      <div>
+                        <dt>Action</dt>
+                        <dd>{vlmState.toolCall.arguments.action}</dd>
+                      </div>
+                    )}
+                    {vlmState.toolCall?.arguments?.text && (
+                      <div>
+                        <dt>Text</dt>
+                        <dd>
+                          <code>{vlmState.toolCall.arguments.text}</code>
+                        </dd>
+                      </div>
+                    )}
+                    {vlmState.metrics && (
+                      <div>
+                        <dt>Latency</dt>
+                        <dd>
+                          Capture {Math.round(vlmState.metrics.captureMs)} ms · Request {Math.round(vlmState.metrics.requestMs)} ms
+                        </dd>
+                      </div>
+                    )}
+                    {vlmState.configSnapshot && (
+                      <div>
+                        <dt>Sampling</dt>
+                        <dd>
+                          τ {vlmState.configSnapshot.temperature.toFixed(2)} · max {vlmState.configSnapshot.maxOutputTokens}
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
+                  {vlmState.error && <p className="vlm-status__error">{vlmState.error}</p>}
+                  {vlmState.rawText && (
+                    <details className="vlm-status__raw">
+                      <summary>Raw response</summary>
+                      <pre>{vlmState.rawText}</pre>
+                    </details>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section className="panel panel--snapshots">
+              <div className="panel__header">
+                <div>
+                  <h2>Âme vault</h2>
+                  <p className="panel__hint">Manage captured VM souls for instant restores.</p>
+                </div>
+              </div>
+              <div className="panel__body">
+                <div className="snapshot-hall">
+                  {profileSnapshots.length === 0 && otherSnapshots.length === 0 ? (
+                    <p className="snapshot-entry__meta">No Âme stored yet. Import or capture one to enable instant resumes.</p>
+                  ) : (
+                    <ul className="snapshot-list">
+                      {profileSnapshots.map((snapshot) => {
+                        const isActive = snapshot.id === activeSnapshotId;
+                        const isRenaming = renamingSnapshotId === snapshot.id;
+                        return (
+                          <li
+                            key={snapshot.id}
+                            className={`snapshot-entry ${isActive ? 'snapshot-entry--active' : ''}`}
+                          >
+                            <div className="snapshot-entry__main">
+                              {isRenaming ? (
+                                <input
+                                  autoFocus
+                                  value={renameDraft}
+                                  onChange={(event) => setRenameDraft(event.target.value)}
+                                  onKeyDown={handleRenameKeyDown}
+                                />
+                              ) : (
+                                <button type="button" onClick={() => handleSelectSnapshot(snapshot)}>
+                                  <span className="snapshot-entry__name">{snapshot.name}</span>
+                                  <span className="snapshot-entry__meta">
+                                    {formatFileSize(snapshot.size)} · {formatTimestamp(snapshot.savedAt)}
+                                  </span>
+                                </button>
+                              )}
+                            </div>
+                            <div className="snapshot-entry__actions">
+                              {isRenaming ? (
+                                <>
+                                  <button type="button" onClick={() => void confirmRenameSnapshot()}>Save</button>
+                                  <button type="button" onClick={cancelRenameSnapshot}>Cancel</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button type="button" onClick={() => beginRenameSnapshot(snapshot)}>Rename</button>
+                                  <button type="button" onClick={() => void handleExportSnapshot(snapshot)}>
+                                    Export
+                                  </button>
+                                  <button type="button" onClick={() => void handleDeleteSnapshot(snapshot.id)}>
+                                    Delete
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {otherSnapshots.length > 0 && (
+                    <div className="snapshot-others">
+                      Snapshots from other profiles
+                      <ul>
+                        {otherSnapshots.map((snapshot) => (
+                          <li key={snapshot.id}>
                             <button type="button" onClick={() => handleSelectSnapshot(snapshot)}>
-                              <span className="snapshot-entry__name">{snapshot.name}</span>
-                              <span className="snapshot-entry__meta">
-                                {formatFileSize(snapshot.size)} · {formatTimestamp(snapshot.savedAt)}
-                              </span>
+                              {snapshot.name} · {snapshot.profileId}
                             </button>
-                          )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="panel__footer snapshot-actions">
+                <button
+                  type="button"
+                  className="control-button"
+                  onClick={triggerSnapshotDialog}
+                  disabled={!canImportSnapshot}
+                >
+                  Import
+                </button>
+                <button
+                  type="button"
+                  className="control-button"
+                  onClick={() => {
+                    void handleCaptureSnapshot();
+                  }}
+                  disabled={!canCaptureSnapshot}
+                >
+                  Capture
+                </button>
+              </div>
+              <input
+                ref={snapshotInputRef}
+                type="file"
+                accept=".bin,application/octet-stream"
+                onChange={handleSnapshotFileChange}
+                data-testid="snapshot-file-input"
+                hidden
+              />
+            </section>
+
+            <ActionPlaybook
+              actions={ACTION_PLAYBOOKS}
+              runAction={runAction}
+              activeActionId={activeActionId}
+              isRunning={isActionRunning}
+              lastCompletedActionId={lastCompletedActionId}
+              errorMessage={actionError ? actionError.message : null}
+            />
+
+            <section className="panel panel--assets">
+              <div className="panel__header">
+                <div>
+                  <h2>Profile assets</h2>
+                  <p className="panel__hint">Disk and ISO requirements for this agent profile.</p>
+                </div>
+              </div>
+              <div className="panel__body">
+                <ul className="asset-manifest">
+                  {activeProfile.assetManifest.map((asset) => {
+                    const status = assetStatusMap[asset.path] ?? { status: 'unknown' };
+                    const statusLabel =
+                      status.status === 'available'
+                        ? 'Available'
+                        : status.status === 'missing'
+                        ? 'Missing'
+                        : status.status === 'downloading'
+                        ? 'Downloading'
+                        : status.status === 'error'
+                        ? 'Error'
+                        : 'Unknown';
+                    const isDownloading = status.status === 'downloading';
+                    const loadedBytes = typeof status.loaded === 'number' ? status.loaded : 0;
+                    const totalBytes =
+                      typeof status.total === 'number' && status.total > 0 ? status.total : undefined;
+                    const progressPercent =
+                      totalBytes && totalBytes > 0 ? Math.min(100, Math.round((loadedBytes / totalBytes) * 100)) : undefined;
+
+                    return (
+                      <li key={asset.path} className={`asset-manifest__item asset-manifest__item--${status.status}`}>
+                        <div>
+                          <span className="asset-manifest__name">{asset.label}</span>
+                          {asset.description && <p className="asset-manifest__description">{asset.description}</p>}
+                          {asset.optional && <span className="asset-manifest__optional">Optional</span>}
                         </div>
-                        <div className="snapshot-entry__actions">
-                          {isRenaming ? (
-                            <>
-                              <button type="button" onClick={() => void confirmRenameSnapshot()}>Save</button>
-                              <button type="button" onClick={cancelRenameSnapshot}>Cancel</button>
-                            </>
-                          ) : (
-                            <>
-                              <button type="button" onClick={() => beginRenameSnapshot(snapshot)}>Rename</button>
-                              <button type="button" onClick={() => void handleExportSnapshot(snapshot)}>
-                                Export
-                              </button>
-                              <button type="button" onClick={() => void handleDeleteSnapshot(snapshot.id)}>
-                                Delete
-                              </button>
-                            </>
+                        <div className="asset-manifest__status">
+                          <span className="asset-manifest__status-label">{statusLabel}</span>
+                          {status.size && <span className="asset-manifest__size">{formatFileSize(status.size)}</span>}
+                          {isDownloading && (
+                            <div className="asset-progress">
+                              <div className="asset-progress__bar">
+                                <span style={{ width: `${progressPercent ?? 0}%` }} />
+                              </div>
+                              <span className="asset-progress__value">
+                                {progressPercent !== undefined
+                                  ? `${progressPercent}%`
+                                  : formatFileSize(loadedBytes)}
+                                {totalBytes ? ` · ${formatFileSize(totalBytes)}` : ''}
+                              </span>
+                            </div>
                           )}
+                          {status.error && <span className="asset-manifest__error">{status.error}</span>}
+                          <div className="asset-manifest__actions">
+                            {asset.downloadUrl && (
+                              <button
+                                type="button"
+                                className="asset-manifest__button"
+                                onClick={() => handleAssetDownload(asset)}
+                                disabled={isDownloading || status.downloaded}
+                              >
+                                Télécharger
+                              </button>
+                            )}
+                            {isDownloading && (
+                              <button
+                                type="button"
+                                className="asset-manifest__button asset-manifest__button--ghost"
+                                onClick={() => handleAssetDownloadCancel(asset)}
+                              >
+                                Annuler
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="asset-manifest__button"
+                              onClick={() => triggerAssetFileDialog(asset)}
+                              disabled={isDownloading}
+                            >
+                              Importer
+                            </button>
+                          </div>
+                          <input
+                            ref={registerAssetInput(asset.path)}
+                            type="file"
+                            accept={asset.path.endsWith('.iso') ? '.iso' : '.img,.bin'}
+                            hidden
+                            onChange={handleAssetFileChange(asset)}
+                          />
                         </div>
                       </li>
                     );
                   })}
                 </ul>
-              )}
-              {otherSnapshots.length > 0 && (
-                <div className="snapshot-others">
-                  Snapshots from other profiles
-                  <ul>
-                    {otherSnapshots.map((snapshot) => (
-                      <li key={snapshot.id}>
-                        <button type="button" onClick={() => handleSelectSnapshot(snapshot)}>
-                          {snapshot.name} · {snapshot.profileId}
-                        </button>
+                {downloadEntries.length > 0 && (
+                  <div className="asset-downloads">
+                    <h3>Active downloads</h3>
+                    <ul className="download-list">
+                      {downloadEntries.map(([fileName, info]) => (
+                        <li key={fileName} className="download-list__item">
+                          <div className="download-list__name">{normalizeResourceName(fileName)}</div>
+                          <div className="download-list__progress">
+                            {info.error ? (
+                              <span className="download-list__error">{info.error}</span>
+                            ) : (
+                              <>
+                                <span>{formatFileSize(info.loaded)}</span>
+                                {info.total && info.total > 0 && (
+                                  <span>{formatFileSize(info.total)}</span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {activeProfile.manualSteps.length > 0 && (
+              <section className="panel panel--manual">
+                <div className="panel__header">
+                  <div>
+                    <h2>Manual boot</h2>
+                    <p className="panel__hint">Checklist to configure a fresh Âme before capture.</p>
+                  </div>
+                </div>
+                <div className="panel__body">
+                  <ul className="manual-steps">
+                    {activeProfile.manualSteps.map((step: ManualStep, index: number) => (
+                      <li key={`${step.title}-${index}`}>
+                        <span className="manual-steps__index">{index + 1}</span>
+                        <div>
+                          <span className="manual-steps__title">{step.title}</span>
+                          <p>{step.description}</p>
+                          {step.command && <code>{step.command}</code>}
+                        </div>
                       </li>
                     ))}
                   </ul>
                 </div>
-              )}
-            </div>
-            <div className="snapshot-actions">
-              <button
-                type="button"
-                className="control-button"
-                onClick={triggerSnapshotDialog}
-                disabled={!canImportSnapshot}
-              >
-                Import
-              </button>
-              <button
-                type="button"
-                className="control-button"
-                onClick={() => {
-                  void handleCaptureSnapshot();
-                }}
-                disabled={!canCaptureSnapshot}
-              >
-                Capture
-              </button>
-            </div>
-            <input
-              ref={snapshotInputRef}
-              type="file"
-              accept=".bin,application/octet-stream"
-              onChange={handleSnapshotFileChange}
-              data-testid="snapshot-file-input"
-              hidden
-            />
-          </section>
-
-          <ActionPlaybook
-            actions={ACTION_PLAYBOOKS}
-            runAction={runAction}
-            activeActionId={activeActionId}
-            isRunning={isActionRunning}
-            lastCompletedActionId={lastCompletedActionId}
-            errorMessage={actionError ? actionError.message : null}
-          />
-
-          <section className="stack-card">
-            <h2>Profile assets</h2>
-            <ul className="asset-manifest">
-              {activeProfile.assetManifest.map((asset) => {
-                const status = assetStatusMap[asset.path] ?? { status: 'unknown' };
-                const statusLabel =
-                  status.status === 'available'
-                    ? 'Available'
-                    : status.status === 'missing'
-                    ? 'Missing'
-                    : status.status === 'downloading'
-                    ? 'Downloading'
-                    : status.status === 'error'
-                    ? 'Error'
-                    : 'Unknown';
-                return (
-                  <li key={asset.path} className={`asset-manifest__item asset-manifest__item--${status.status}`}>
-                    <div>
-                      <span className="asset-manifest__name">{asset.label}</span>
-                      {asset.description && <p className="asset-manifest__description">{asset.description}</p>}
-                      {asset.optional && <span className="asset-manifest__optional">Optional</span>}
-                    </div>
-                    <div className="asset-manifest__status">
-                      <span>{statusLabel}</span>
-                      {status.size && <span>{formatFileSize(status.size)}</span>}
-                      {status.loaded && status.total && status.status === 'downloading' && (
-                        <span>
-                          {formatFileSize(status.loaded)} / {formatFileSize(status.total)}
-                        </span>
-                      )}
-                      {status.error && <span className="asset-manifest__error">{status.error}</span>}
-                      <div className="asset-manifest__actions">
-                        <button
-                          type="button"
-                          className="asset-manifest__button"
-                          onClick={() => triggerAssetFileDialog(asset)}
-                        >
-                          Importer
-                        </button>
-                      </div>
-                      <input
-                        ref={registerAssetInput(asset.path)}
-                        type="file"
-                        accept={asset.path.endsWith('.iso') ? '.iso' : '.img,.bin'}
-                        hidden
-                        onChange={handleAssetFileChange(asset)}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-            {downloadEntries.length > 0 && (
-              <div className="asset-downloads">
-                <h3>Active downloads</h3>
-                <ul className="download-list">
-                  {downloadEntries.map(([fileName, info]) => (
-                    <li key={fileName} className="download-list__item">
-                      <div className="download-list__name">{normalizeResourceName(fileName)}</div>
-                      <div className="download-list__progress">
-                        {info.error ? (
-                          <span className="download-list__error">{info.error}</span>
-                        ) : (
-                          <>
-                            <span>{formatFileSize(info.loaded)}</span>
-                            {info.total && info.total > 0 && (
-                              <span>{formatFileSize(info.total)}</span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              </section>
             )}
-          </section>
+          </aside>
+        </main>
 
-          {activeProfile.manualSteps.length > 0 && (
-            <section className="stack-card">
-              <h2>Manual boot</h2>
-              <ul className="manual-steps">
-                {activeProfile.manualSteps.map((step: ManualStep, index: number) => (
-                  <li key={`${step.title}-${index}`}>
-                    <span className="manual-steps__index">{index + 1}</span>
-                    <div>
-                      <span className="manual-steps__title">{step.title}</span>
-                      <p>{step.description}</p>
-                      {step.command && <code>{step.command}</code>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </aside>
+        <footer className="app-footer">
+          <form className="objective-form" onSubmit={handleObjectiveFormSubmit}>
+            <input
+              ref={objectiveInputRef}
+              type="text"
+              placeholder={objectivePlaceholder}
+              disabled={!canSubmitObjective}
+            />
+            <button type="submit" disabled={!canSubmitObjective}>
+              Send
+            </button>
+          </form>
+          <p className="objective-hint">{objectiveHelper}</p>
+        </footer>
       </div>
-      <footer className="objective-bar">
-        <form className="objective-form" onSubmit={handleObjectiveFormSubmit}>
-          <input
-            ref={objectiveInputRef}
-            type="text"
-            placeholder={objectivePlaceholder}
-            disabled={!canSubmitObjective}
-          />
-          <button type="submit" disabled={!canSubmitObjective}>
-            Send
-          </button>
-        </form>
-        <p className="objective-hint">{objectiveHelper}</p>
-      </footer>
     </div>
   );
 };

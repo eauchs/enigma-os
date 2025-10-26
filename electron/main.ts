@@ -7,27 +7,47 @@ app.commandLine.appendSwitch('disable-audio-output')
 app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess')
 
 function createWindow(): void {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 1340,
+    height: 900,
+    minWidth: 1120,
+    minHeight: 760,
     show: false,
+    title: 'Enigma OS · Control Room',
+    backgroundColor: '#050a1a',
     autoHideMenuBar: true,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    trafficLightPosition: process.platform === 'darwin' ? { x: 18, y: 18 } : undefined,
+    vibrancy: process.platform === 'darwin' ? 'sidebar' : undefined,
+    visualEffectState: 'active',
+    backgroundMaterial: process.platform === 'win32' ? 'mica' : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/preload.mjs'),
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      spellcheck: false
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
+  mainWindow.once('ready-to-show', () => {
     mainWindow.show()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
+  })
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow.setTitle('Enigma OS · Control Room')
+    if (process.platform !== 'darwin') {
+      mainWindow.setMenuBarVisibility(false)
+    }
+    if (process.platform === 'darwin') {
+      mainWindow.setVibrancy('sidebar')
+      mainWindow.setVisualEffectState('active')
+    }
   })
 
   // HMR for renderer base on electron-vite cli.

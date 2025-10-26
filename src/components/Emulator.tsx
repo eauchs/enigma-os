@@ -6,6 +6,20 @@ export interface CaptureScreenshotOptions {
   quality?: number;
 }
 
+export interface EmulatorPointerCoordinate {
+  x: number;
+  y: number;
+  referenceWidth?: number;
+  referenceHeight?: number;
+}
+
+export interface EmulatorPointerActionRequest {
+  type: 'move' | 'left_click' | 'right_click' | 'double_click' | 'scroll' | 'drag';
+  coordinate?: EmulatorPointerCoordinate;
+  targetCoordinate?: EmulatorPointerCoordinate;
+  scrollDelta?: { x?: number; y?: number };
+}
+
 export interface EmulatorRef {
   serial0_send: (cmd: string) => void;
   keyboardType: (text: string) => void;
@@ -14,6 +28,8 @@ export interface EmulatorRef {
   runKeyboardCommand: (command: string) => void;
   saveState: () => Promise<ArrayBuffer | null>;
   captureScreenshot: (options?: CaptureScreenshotOptions) => Promise<string | null>;
+  focusViewport?: () => void;
+  performPointerAction?: (request: EmulatorPointerActionRequest) => Promise<void> | void;
 }
 
 export interface EmulatorBootDisk {
@@ -477,6 +493,176 @@ const Emulator = forwardRef<EmulatorRef, EmulatorProps>(
       }
 
       return null;
+    },
+    focusViewport: () => {
+      const container = screenContainerRef.current;
+      if (container) {
+        container.focus();
+      }
+    },
+    performPointerAction: async (request: EmulatorPointerActionRequest) => {
+      if (typeof window === 'undefined') {
+        throw new Error('Pointer actions require a browser environment.');
+      }
+      const container = screenContainerRef.current;
+      if (!container) {
+        throw new Error('Emulator viewport is not mounted.');
+      }
+      const canvas = container.querySelector('canvas');
+      if (!(canvas instanceof HTMLCanvasElement)) {
+        throw new Error('Emulator canvas element is unavailable.');
+      }
+
+      const rect = canvas.getBoundingClientRect();
+      const resolvePoint = (coordinate?: EmulatorPointerCoordinate) => {
+        const fallbackWidth = rect.width || coordinate?.referenceWidth || 1;
+        const fallbackHeight = rect.height || coordinate?.referenceHeight || 1;
+        const referenceWidth =
+          typeof coordinate?.referenceWidth === 'number' && coordinate.referenceWidth > 0
+            ? coordinate.referenceWidth
+            : fallbackWidth;
+        const referenceHeight =
+          typeof coordinate?.referenceHeight === 'number' && coordinate.referenceHeight > 0
+            ? coordinate.referenceHeight
+            : fallbackHeight;
+        const xValue =
+          typeof coordinate?.x === 'number' && Number.isFinite(coordinate.x)
+            ? coordinate.x
+            : referenceWidth / 2;
+        const yValue =
+          typeof coordinate?.y === 'number' && Number.isFinite(coordinate.y)
+            ? coordinate.y
+            : referenceHeight / 2;
+        const scaleX = referenceWidth > 0 ? rect.width / referenceWidth : 1;
+        const scaleY = referenceHeight > 0 ? rect.height / referenceHeight : 1;
+        const clientX = rect.left + xValue * scaleX;
+        const clientY = rect.top + yValue * scaleY;
+        return {
+          clientX,
+          clientY,
+          screenX: clientX + window.screenX,
+          screenY: clientY + window.screenY,
+          pageX: clientX + window.scrollX,
+          pageY: clientY + window.scrollY
+        };
+      };
+
+      const dispatchPointerEvent = (
+        type: string,
+        init: PointerEventInit & { clientX: number; clientY: number }
+      ) => {
+        if (typeof PointerEvent === 'function') {
+          const pointerEvent = new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            pointerType: 'mouse',
+            ...init
+          });
+          canvas.dispatchEvent(pointerEvent);
+        }
+      };
+
+      const dispatchMouseEvent = (
+        type: string,
+        init: MouseEventInit & { clientX: number; clientY: number }
+      ) => {
+        const mouseEvent = new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          ...init
+        });
+        canvas.dispatchEvent(mouseEvent);
+      };
+
+      const sleep = (ms: number) =>
+        new Promise<void>((resolve) => {
+          window.setTimeout(resolve, ms);
+        });
+
+      container.focus();
+
+      const pointerType = request.type;
+      const start = resolvePoint(request.coordinate);
+
+      switch (pointerType) {
+        case 'move': {
+          dispatchPointerEvent('pointermove', { ...start, buttons: 0 });
+          dispatchMouseEvent('mousemove', { ...start, buttons: 0 });
+          break;
+        }
+        case 'left_click': {
+          dispatchPointerEvent('pointermove', { ...start, buttons: 0 });
+          dispatchMouseEvent('mousemove', { ...start, buttons: 0 });
+          dispatchPointerEvent('pointerdown', { ...start, buttons: 1, button: 0 });
+          dispatchMouseEvent('mousedown', { ...start, buttons: 1, button: 0 });
+          await sleep(40);
+          dispatchPointerEvent('pointerup', { ...start, buttons: 0, button: 0 });
+          dispatchMouseEvent('mouseup', { ...start, buttons: 0, button: 0 });
+          dispatchMouseEvent('click', { ...start, buttons: 0, button: 0 });
+          break;
+        }
+        case 'right_click': {
+          dispatchPointerEvent('pointermove', { ...start, buttons: 0 });
+          dispatchMouseEvent('mousemove', { ...start, buttons: 0 });
+          dispatchPointerEvent('pointerdown', { ...start, buttons: 2, button: 2 });
+          dispatchMouseEvent('mousedown', { ...start, buttons: 2, button: 2 });
+          await sleep(40);
+          dispatchPointerEvent('pointerup', { ...start, buttons: 0, button: 2 });
+          dispatchMouseEvent('mouseup', { ...start, buttons: 0, button: 2 });
+          dispatchMouseEvent('contextmenu', { ...start, button: 2 });
+          break;
+        }
+        case 'double_click': {
+          const triggerClick = async () => {
+            dispatchPointerEvent('pointerdown', { ...start, buttons: 1, button: 0 });
+            dispatchMouseEvent('mousedown', { ...start, buttons: 1, button: 0 });
+            await sleep(35);
+            dispatchPointerEvent('pointerup', { ...start, buttons: 0, button: 0 });
+            dispatchMouseEvent('mouseup', { ...start, buttons: 0, button: 0 });
+            dispatchMouseEvent('click', { ...start, buttons: 0, button: 0 });
+          };
+          dispatchPointerEvent('pointermove', { ...start, buttons: 0 });
+          dispatchMouseEvent('mousemove', { ...start, buttons: 0 });
+          await triggerClick();
+          await sleep(80);
+          await triggerClick();
+          dispatchMouseEvent('dblclick', { ...start, buttons: 0, button: 0 });
+          break;
+        }
+        case 'scroll': {
+          const deltaX = request.scrollDelta?.x ?? 0;
+          const deltaY = request.scrollDelta?.y ?? 120;
+          const wheelEvent = new WheelEvent('wheel', {
+            bubbles: true,
+            cancelable: true,
+            clientX: start.clientX,
+            clientY: start.clientY,
+            deltaX,
+            deltaY
+          });
+          canvas.dispatchEvent(wheelEvent);
+          break;
+        }
+        case 'drag': {
+          const target = resolvePoint(
+            request.targetCoordinate ?? request.coordinate
+          );
+          dispatchPointerEvent('pointermove', { ...start, buttons: 0 });
+          dispatchMouseEvent('mousemove', { ...start, buttons: 0 });
+          dispatchPointerEvent('pointerdown', { ...start, buttons: 1, button: 0 });
+          dispatchMouseEvent('mousedown', { ...start, buttons: 1, button: 0 });
+          await sleep(40);
+          dispatchPointerEvent('pointermove', { ...target, buttons: 1 });
+          dispatchMouseEvent('mousemove', { ...target, buttons: 1, button: 0 });
+          await sleep(40);
+          dispatchPointerEvent('pointerup', { ...target, buttons: 0, button: 0 });
+          dispatchMouseEvent('mouseup', { ...target, buttons: 0, button: 0 });
+          break;
+        }
+        default:
+          throw new Error(`Unsupported pointer action: ${pointerType}`);
+      }
     }
   }));
 

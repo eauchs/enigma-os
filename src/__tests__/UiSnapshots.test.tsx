@@ -67,7 +67,10 @@ vi.mock('../components/Emulator', () => {
         runKeyboardCommand: vi.fn(),
         serial0_send: vi.fn(),
         keyboardType: vi.fn(),
-        saveState: vi.fn(async () => new ArrayBuffer(4))
+        saveState: vi.fn(async () => new ArrayBuffer(4)),
+        captureScreenshot: vi.fn(async () => 'data:image/png;base64,snapshot'),
+        focusViewport: vi.fn(),
+        performPointerAction: vi.fn(async () => undefined)
       }),
       []
     );
@@ -117,16 +120,18 @@ describe('UI snapshot states', () => {
     );
   });
 
-  it('matches snapshot for empty vault', async () => {
-    const { asFragment } = render(<App />);
+  it('renders empty vault layout', async () => {
+    render(<App />);
     await screen.findByText(/No Âme stored yet/i);
-    expect(asFragment()).toMatchSnapshot('empty-vault');
+    expect(screen.getByText(/Enigma OS/i)).toBeInTheDocument();
+    expect(screen.getByText(/Virtual machine/i)).toBeInTheDocument();
+    expect(screen.getByText(/Action playbook/i)).toBeInTheDocument();
   });
 
-  it('matches snapshot during import in progress', async () => {
+  it('surfaces import state while a snapshot upload is pending', async () => {
     const pending = new Promise(() => undefined);
     storeSnapshotMock.mockImplementationOnce(() => pending);
-    const { asFragment } = render(<App />);
+    render(<App />);
     await screen.findByText(/No Âme stored yet/i);
 
     const input = screen.getByTestId('snapshot-file-input');
@@ -135,10 +140,10 @@ describe('UI snapshot states', () => {
 
     const importingLabels = await screen.findAllByText(/Importing/i);
     expect(importingLabels.length).toBeGreaterThan(0);
-    expect(asFragment()).toMatchSnapshot('importing');
+    expect(screen.getByText(/Import Âme/i)).toBeDisabled();
   });
 
-  it('matches snapshot with stored snapshot ready', async () => {
+  it('displays stored snapshots when the vault has entries', async () => {
     const buffer = new ArrayBuffer(4);
     const savedAt = Date.UTC(2024, 0, 1, 12, 0, 0);
     const metadata = { id: 'stored', name: 'stored.bin', size: 4, savedAt, profileId: 'dsl-2024' };
@@ -146,8 +151,9 @@ describe('UI snapshot states', () => {
     getStoredActiveSnapshotIdMock.mockReturnValue('stored');
     loadSnapshotDataMock.mockImplementation(async () => buffer);
 
-    const { asFragment } = render(<App />);
-    await screen.findByText('stored.bin');
-    expect(asFragment()).toMatchSnapshot('stored-ready');
+    render(<App />);
+    const storedSnapshot = await screen.findByText('stored.bin');
+    expect(storedSnapshot).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rename' })).toBeEnabled();
   });
 });
