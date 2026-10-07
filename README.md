@@ -20,7 +20,7 @@ L’interface « Control Room » fournit ensuite une vision synthétique de l�
 - **Objectifs** : champ d’input prêt à recevoir les commandes/intentions qui seront, demain, traduites par le VLM embarqué.
 
 ## Flux de travail
-1. **Choisir le profil** (`Damn Small Linux 2024` par défaut) — définit les assets attendus, la mémoire, les prompts série et les commandes auto (login + GUI).
+1. **Choisir le profil** (`Damn Small Linux 2024` par défaut) : il définit les assets attendus, la mémoire, les prompts série et les commandes auto (login + GUI).
 2. **Fournir les assets** :
    - Téléchargés via le bouton « Télécharger » (ouvre directement la ressource copy.sh dans un nouvel onglet si le CORS bloque),
    - ou importés depuis votre machine (« Importer ») pour injecter un `.img`/`.iso` local dans la session courante.
